@@ -9,7 +9,7 @@ Records Claude Code usage over time - quota percent, tokens, Claude Code's own $
 | Words | the `## Vocabulary` table of `AGENTS.md` |
 | History | the migration plan and the record of the open questions: `git show 1ced0c4:design/MIGRATION_PLAN.md`, `git show 1ced0c4:design/OPEN_QUESTIONS.md` |
 | Changed 2026-10-12 | P13 `data/claude/intermediary.db` replaces `intermediary/claude/`; P14 one `aggregates` file per machine in `data/claude/aggregates/`, replacing `central/` (§11); built the same day, 18:45 UTC (`migrate_to_target.py data-layout`) |
-| Open work | Todoist (skill `task-management`): its tasks carry `Repo: agent-usage-tracker`; [`viewer.html`](../viewer.html) shows them |
+| Open work | Todoist (skill `tasks`): its tasks carry `Repo: agent-usage-tracker`; [`viewer.html`](../viewer.html) shows them |
 
 ## 1. The four categories, and the picture
 
