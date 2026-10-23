@@ -9,7 +9,7 @@ Records Claude Code usage over time - quota percent, tokens, Claude Code's own $
 | Words | the `## Vocabulary` table of `AGENTS.md` |
 | History | the migration plan and the record of the open questions: `git show 1ced0c4:design/MIGRATION_PLAN.md`, `git show 1ced0c4:design/OPEN_QUESTIONS.md` |
 | Changed 2026-10-12 | P13 `data/claude/intermediary.db` replaces `intermediary/claude/`; P14 one `aggregates` file per machine in `data/claude/aggregates/`, replacing `central/` (§11); built the same day, 18:45 UTC (`migrate_to_target.py data-layout`) |
-| Open work | Todoist (skill `tasks`): its tasks carry `Repo: agent-usage-tracker`; [`viewer.html`](../viewer.html) shows them |
+| Open work | Todoist (skill `tasks`): its tasks carry `Repo: agent-usage-tracker`; [`todo.html`](../todo.html) shows them |
 
 ## 1. The four categories, and the picture
 
@@ -67,7 +67,7 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 ├── FOR_READERS.md                  how other projects read the data
 ├── doc/                            design.md (this file), tables.md (every table, field by field),
 │                                   upstream.md (what exists upstream), changes.md (what changed, when)
-├── viewer.html                     open work: this repo's tasks in Todoist
+├── todo.html                     open work: this repo's tasks in Todoist
 ├── src/                            gates, collectors, usage_db.py; launchd/, systemd/ trigger templates
 ├── jobs/                           job-runner entrypoints <job>.sh and their dashboard settings <job>.conf
 ├── install.sh, uninstall.sh
