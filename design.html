@@ -125,6 +125,7 @@ footer{color:var(--muted);font-size:13px}
     <span class="trig">✋ by hand</span> ·
     <span class="trig good">🔍 on call</span> computed when the command runs, nothing stored; who calls it and how often: "Use cases"
   </div>
+  <div class="ask" style="background:var(--trk-bg);border-color:var(--trk)"><b>What agent-tracker is (you, 2026-11-07):</b> a <b>foundational layer</b>. It makes sure the data about Claude sessions is recorded and present; it provides <b>no feature</b>. Features (finding, resuming, restoring after a crash, pane colors, quotas) live in the projects that use the data and read its files directly. Its only feature is <b>visibility</b>: <code>agent-tracker now</code> (what runs where) and <code>agent-tracker check</code> (is every writer actually writing?).</div>
 </header>
 
 <!-- ========================= DIAGRAM 1: TODAY ========================= -->
@@ -288,7 +289,7 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
  "cwd":"/Users/jeanlescut",
  "transcript":"~/.claude/projects/-Users-jeanlescut/cbf1952e-….jsonl"}</pre><div class="note">rewritten whole (temp file + rename), ≤ 1 per minute · <b class="good">after a crash: where every Claude session was, ≤ 1 min before</b></div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-ntf"><b>notify</b> <span class="when">machine · each notify hook · 530–2,880 / day</span><br>UUID (from the hook) → this one file → pane_id</div><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">machine · launchd · 1,440 / day</span><br>newest ts &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents (cc-map, cc-rc) · ≈ 1.4 / day</span><br>pane, pid, folder, ts</div><div class="rd c-trk"><b>open-at-crash</b> <span class="when">you · 2 in 25 days</span><br>pane, folder, ts, boot_ts</div></div>
+      <div class="r"><div class="rd c-ntf"><b>notify</b> <span class="when">machine · each notify hook · 530–2,880 / day</span><br>UUID (from the hook) → this one file → pane_id</div><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">machine · launchd · 1,440 / day</span><br>newest ts &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents (cc-map, cc-rc) · ≈ 1.4 / day</span><br>pane, pid, folder, ts</div><div class="rd c-asm"><b>asm resume-tmux</b> <span class="when">you · after a crash · 2 in 25 days</span><br>pane, window_layout, folder, ts, boot_ts</div><div class="rd c-trk"><b>agent-tracker check</b> <span class="when">you · after an install</span><br>is it fresh (&lt; 2 min)?</div></div>
     </div>
     <div class="row">
       <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">lifecycle: <code>agent-tracker hook start|end</code></div><div><span class="trig">⚡ SessionStart</span><span class="trig">⚡ SessionEnd</span></div><div class="note">moved from asm (same 2 hooks, not new ones) · measured: 17.5 starts + 11 ends / day · never an end on a crash</div></div>
@@ -298,7 +299,7 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
  "pid":4607,"pid_start":1794047610,"pane_id":"%0","pane":"jeanlescut:0.0","cwd":"/Users/jeanlescut"}
 {"ts":1794050289,"dt":"2026-11-07T11:18:09Z","event":"end","reason":"exit","pid":4607}</pre><div class="note">append-only, one line per start / resume / end · the transcript has no exit entry (verified on 3 ended Claude sessions) · <b>87 of 245</b> starts in 14 days never got an end</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-asm"><b>asm duplicate check</b> <span class="when">machine · each SessionStart · 17.5 / day</span><br>pids of earlier starts: still alive?</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents · ≈ 1.4 / day</span><br>last event: start (open) or end</div><div class="rd c-trk"><b>open-at-crash</b> <span class="when">you · 2 in 25 days</span><br>starts of the previous boot with no end</div></div>
+      <div class="r"><div class="rd c-asm"><b>asm duplicate check</b> <span class="when">machine · each SessionStart · 17.5 / day</span><br>pids of earlier starts: still alive?</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents · ≈ 1.4 / day</span><br>last event: start (open) or end</div><div class="rd c-asm"><b>asm resume-tmux</b> <span class="when">you · after a crash · 2 in 25 days</span><br>starts of the previous boot with no end</div></div>
     </div>
 
     <div class="sep">read on call (by the commands in "Use cases"), never copied</div>
@@ -344,7 +345,7 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
     <div class="row">
       <div class="w c-asm bg-asm"><div class="who">asm</div><div class="stream">resume-tmux (replaces my-setup's terminal_snapshot.py)</div><div><span class="trig">✋ you, after a crash</span></div><div class="note">2 in 25 days · writes nothing: it acts</div></div>
       <div class="arrow">→</div>
-      <div class="f"><div class="path">what it does (no file)</div><pre>agent-tracker open-at-crash --json        ← the list
+      <div class="f"><div class="path">what it does (no file)</div><pre>read data/*/ of the previous boot          ← what was open at the crash
 tmux new-session -d -s general -c ~       ← each tmux session and window
 tmux select-layout -t general:0 'b25f,208x52,0,0{104x52,0,0,1,103x52,105,0,2}'
 tmux send-keys -t general:0.0 'cd ~ &amp;&amp; claude --resume cbf1952e-…' Enter
@@ -388,8 +389,8 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td class="proj">usage quota job (no command)</td><td>"is a statusline on screen?"</td><td><b>machine</b>: launchd, every 60 s</td><td><b>1,440 / day</b></td><td>newest <code>ts</code> among the current boot's <code>last_seen.json</code></td><td>seconds</td></tr>
       <tr><td class="proj"><code>asm resume</code></td><td>find and reopen a past Claude session</td><td><b>you</b> type it · <b>agents</b> run it</td><td>you <b>33</b> + agents <b>19</b> in 30 days ≈ 1.7 / day</td><td>asm's index, refreshed for changed transcripts (4 ms + a few files)</td><td>you wait: &lt; 1 s</td></tr>
       <tr><td class="proj"><code>agent-tracker now</code></td><td>prints the open Claude sessions: pane, folder, busy/idle, last prompt</td><td><b>agents</b>, via cc-map and cc-rc (skill claude-sessions-overview), when you ask</td><td>cc-map <b>23</b> + cc-rc <b>20</b> in 30 days ≈ 1.4 / day</td><td>~14 <code>last_seen.json</code>, live files, ~14 transcript ends</td><td>you wait: &lt; 1 s</td></tr>
-      <tr><td class="proj"><code>asm resume-tmux</code></td><td>puts back every tmux session, window, pane size, and <code>claude --resume</code> in each Claude pane; one iTerm2 tab per tmux session</td><td><b>you</b>, after a crash</td><td><b>2 in 25 days</b> (today terminal_snapshot: agents ran it 9 times in 30 days)</td><td><code>agent-tracker open-at-crash --json</code> → acts on tmux and iTerm2, writes nothing</td><td>none</td></tr>
-      <tr><td class="proj"><code>agent-tracker open-at-crash</code></td><td>lists what was open when the Mac died (only reads)</td><td><code>asm resume-tmux</code>, or <b>you</b>, after a crash</td><td><b>2 in 25 days</b> (13 Oct, 7 Nov)</td><td>previous boot's <code>lifecycle.jsonl</code> + <code>last_seen.json</code></td><td>none</td></tr>
+      <tr><td class="proj"><code>asm resume-tmux</code> (asm)</td><td>finds what was open at the crash, then puts back every tmux session, window, pane size, and <code>claude --resume</code> in each Claude pane; one iTerm2 tab per tmux session</td><td><b>you</b>, after a crash</td><td><b>2 in 25 days</b> (today terminal_snapshot: agents ran it 9 times in 30 days)</td><td>the previous boot's <code>lifecycle.jsonl</code> + <code>last_seen.json</code>, read directly → acts on tmux and iTerm2</td><td>none</td></tr>
+      <tr><td class="proj"><code>agent-tracker check</code></td><td>says whether every writer is writing on this machine: statusLine chained, hooks installed, a fresh <code>last_seen.json</code> for each open Claude session</td><td><b>you</b>, after installing on a machine (later maybe a job-runner canary)</td><td>new: not measured</td><td><code>~/.claude/sessions</code>, <code>data/</code>, <code>~/.claude/settings.json</code> · writes nothing</td><td>none</td></tr>
     </tbody>
   </table>
   </div>
@@ -432,11 +433,16 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
     busy/idle?  ~/.claude/sessions/&lt;pid&gt;.json                      (live, Claude Code's own)
     last prompt the end of the transcript (≤ 256 KB): last "user" entry
 
-<span class="k">agent-tracker open-at-crash</span>  (asm resume-tmux, or you, once after a crash)
+<span class="k">asm resume-tmux</span>, step 1 "what was open at the crash"   (a feature: in asm, reads the files directly)
   prev_boot  = the newest boot_ts that is not the current one
   last_tick  = the newest ts among prev_boot's folders                 (≈ the moment of the crash)
   each folder whose last lifecycle event is a start in prev_boot, with ts ≥ last_tick − 2 min  (killed ones stopped ticking)
   one per pane_id: the newest ts wins                                   (the pane was reused)
+
+<span class="k">agent-tracker check</span>          (you, after an install: visibility of the data itself)
+  each open Claude session (Claude Code's ~/.claude/sessions): a start line and a last_seen.json &lt; 2 min old?
+  is my-setup's statusLine chained through agent-tracker tick? are the two hooks installed?
+  → one line per problem: "no last_seen.json for 3 open Claude sessions: statusLine not chained on this machine"
 
 <span class="k">asm resume</span>
   for each transcript newer than its index entry (checking all dates: 4 ms): re-read it, update the entry
@@ -488,7 +494,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td class="proj">asm duplicate check</td><td>UUID (hook)</td><td><code>lifecycles/&lt;uuid&gt;.jsonl</code> → old pids</td><td><code>data/&lt;uuid&gt;/last_seen.json</code> → pid still alive?</td></tr>
       <tr><td class="proj">notify hooks</td><td><b>shell PID</b></td><td><code>/tmp/agent-notify-$USER/&lt;shell_pid&gt;/</code></td><td><b>UUID</b> (hook) → <code>data/&lt;uuid&gt;/last_seen.json</code> → pane</td></tr>
       <tr><td class="proj">cc-map, cc-rc</td><td><b>tmux pane</b></td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td><code>agent-tracker now --pane</code></td></tr>
-      <tr><td class="proj">terminal_snapshot → asm resume-tmux</td><td>tmux pane · the previous boot</td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td><code>agent-tracker open-at-crash --json</code></td></tr>
+      <tr><td class="proj">terminal_snapshot → asm resume-tmux</td><td>tmux pane · the previous boot</td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td>the previous boot's <code>data/*/</code>, read directly</td></tr>
       <tr><td class="proj">usage quota job</td><td>agent type</td><td><code>heartbeat/claude</code> age</td><td>newest ts among <code>data/*/last_seen.json</code></td></tr>
       <tr><td class="proj">usage payload, Chrome kit</td><td>UUID</td><td>their own stores</td><td>unchanged</td></tr>
     </tbody>
@@ -589,7 +595,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
     <tbody>
       <tr><td class="n">1</td><td>this design, reviewed by you; the scope and the restore decided</td><td>agent-tracker</td><td>you say yes</td></tr>
       <tr><td class="n">2</td><td><code>tick</code> + <code>hook start|end</code> + my-setup's chain, beside today's streams; nothing removed</td><td>agent-tracker, my-setup</td><td>a folder per Claude session, for 2 days</td></tr>
-      <tr><td class="n">3</td><td><code>now</code>, <code>open-at-crash</code>; <code>asm resume-tmux</code> on top; then remove terminal_snapshot.py and resurrect + continuum</td><td>agent-tracker, asm, my-setup</td><td>a killed test tmux gets its windows, pane sizes and Claude sessions back</td></tr>
+      <tr><td class="n">3</td><td><code>now</code> and <code>check</code> (agent-tracker); <code>asm resume-tmux</code> (asm); then remove terminal_snapshot.py and resurrect + continuum</td><td>agent-tracker, asm, my-setup</td><td>a killed test tmux gets its windows, pane sizes and Claude sessions back</td></tr>
       <tr><td class="n">4</td><td>asm: index refreshed at search time; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job</td><td>asm</td><td><code>asm resume --state pending</code> gives the same list, with no lag</td></tr>
       <tr><td class="n">5</td><td>notify, cc-map/cc-rc, usage quota job read it; their copies removed</td><td>each repo</td><td>each one's tests pass</td></tr>
     </tbody>
@@ -598,7 +604,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
   <div class="tablewrap">
   <table>
     <tbody>
-      <tr><td>Does Claude Code run the statusline while its pane is hidden (another tmux window)?</td><td>decides whether last seen means "open" or "on screen", the 2-min rule of open-at-crash, and the tick count (5,040 / hour with 14 open) · test in step 2</td></tr>
+      <tr><td>Does Claude Code run the statusline while its pane is hidden (another tmux window)?</td><td>decides whether last seen means "open" or "on screen", the 2-min rule of asm resume-tmux's crash step, and the tick count (5,040 / hour with 14 open) · test in step 2</td></tr>
       <tr><td>Scope: asm's search index, usage and quotas</td><td>open: join agent-tracker or stay apart</td></tr>
       <tr><td>Does the VM sync still need asm's 1800 s job?</td><td>if not, it goes</td></tr>
       <tr><td>Codex: statusline interval, SessionEnd hook</td><td>not measured: no Codex session today</td></tr>
