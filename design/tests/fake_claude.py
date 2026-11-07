@@ -7,6 +7,7 @@ Behaves like Claude Code toward the tools under test:
   - runs the SessionStart hooks of $CLAUDE_CONFIG_DIR/settings.json with Claude's hook JSON on stdin;
   - every --tick seconds runs the statusLine command with a statusline JSON on stdin;
   - on SIGTERM / SIGINT: runs the SessionEnd hooks (reason "exit"), removes its live file, exits 0;
+  - on SIGHUP (its tmux server died): SessionEnd with reason "other", like Claude Code;
   - on SIGKILL (a crash): nothing.
 Usage: fake_claude.py [--resume <uuid>] [--uuid <uuid>] [--tick 2] [--out-dir DIR]
 Reads:  settings.json, the statusline fixture (FAKE_CLAUDE_FIXTURE)
@@ -110,8 +111,19 @@ def on_term(signum, frame):
     sys.exit(0)
 
 
+def on_hup(signum, frame):
+    """The tmux server died under it (2026-11-07 15:30): Claude Code logs a SessionEnd with reason "other"."""
+    run_hooks("SessionEnd", {"reason": "other"})
+    try:
+        os.remove(live)
+    except FileNotFoundError:
+        pass
+    sys.exit(0)
+
+
 signal.signal(signal.SIGTERM, on_term)
 signal.signal(signal.SIGINT, on_term)
+signal.signal(signal.SIGHUP, on_hup)
 write_live("idle")
 run_hooks("SessionStart", {"source": source})
 sys.stdout.write(f"\x1b[?1049h[fake claude {uuid[:8]}]\n")

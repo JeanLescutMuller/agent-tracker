@@ -10,7 +10,10 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-W="${W:-/private/tmp/claude-502/-Users-jeanlescut/cbf1952e-21d4-41ec-af21-d33f8a96cbba/scratchpad/wt}"
+W="${W:-/Users/jeanlescut/dev}"     # the repos, by their names since 2026-11-07 (agent-tracker, agent-resume)
+# Every tmux call (this script's and the tested code's) must go to a throwaway server on an explicit socket:
+# re-run under tests/tmux_guard.sh (the user's rule after a test killed their tmux server, 2026-11-07 15:30).
+[ -n "${TMUX_GUARD_SOCKET:-}" ] || exec bash "$HERE/../../tests/tmux_guard.sh" bash "$0" "$@"
 AAC="${AAC:-/Users/jeanlescut/dev/agent-auto-close}"
 S="${1:-$(mktemp -d)}"
 REAL_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
@@ -19,15 +22,14 @@ mkdir -p "$S/home/.claude" "$S/log" "$S/out" "$S/bin" "$S/proj/alpha" "$S/proj/b
 # --- sandbox environment: nothing points at the real home or the real tmux server ---
 unset TMUX TMUX_PANE CLAUDE_CODE_SESSION_ID CLAUDECODE CODEX_HOME AGENT_USAGE_TRACKER_DIR
 export HOME="$S/home" CLAUDE_CONFIG_DIR="$S/home/.claude" AGENT_TRACKER_HOME="$S/home/opt/agent-tracker"
-# tmux sockets must stay under ~104 characters: a short folder under /tmp, holding only the sandbox socket
-export AGENT_RESUME_HOME="$S/home/opt/agent-resume" TMUX_TMPDIR="$(mktemp -d /tmp/at-tmux.XXXXXX)" JR_MACHINE_NAME=test-machine
+export AGENT_RESUME_HOME="$S/home/opt/agent-resume" JR_MACHINE_NAME=test-machine
 export FAKE_CLAUDE_FIXTURE="$HERE/../fixtures/statusline_payload.claude.json" FAKE_CLAUDE_OUT="$S/out"
-SYS_DIRS="$(dirname "$(command -v tmux)"):$(dirname "$(command -v python3)"):$(dirname "$(command -v jq)"):/usr/bin:/bin:/usr/sbin:/sbin"
+SYS_DIRS="$(dirname "$TMUX_GUARD_SOCKET")/bin:$(dirname "$TMUX_GUARD_REAL"):$(dirname "$(command -v python3)"):$(dirname "$(command -v jq)"):/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH="$S/bin:$HOME/.local/bin:$SYS_DIRS"
 export SHELL=/bin/zsh
 : > "$HOME/.zshrc"                       # no zsh first-run wizard in new panes
 [ "$HOME" != "$REAL_HOME" ] || { echo "refusing: HOME is the real home"; exit 2; }
-case "$TMUX_TMPDIR" in /tmp/at-tmux.*) ;; *) echo "refusing: TMUX_TMPDIR not a sandbox folder"; exit 2 ;; esac
+[ "$(command -v tmux)" = "$(dirname "$TMUX_GUARD_SOCKET")/bin/tmux" ] || { echo "refusing: tmux is not the guard's"; exit 2; }
 
 shopt -s nullglob
 PASS=0; FAIL=0
@@ -50,13 +52,13 @@ chmod +x "$S/bin/claude"
 
 echo "== 1. install into the sandbox HOME"
 (cd "$W/agent-statusline" && bash install.sh) >"$S/log/i-statusline.log" 2>&1;      check "agent-statusline install" "true"
-(cd "$W/agent-usage-tracker" && bash install.sh) >"$S/log/i-tracker.log" 2>&1;      check "agent-tracker install (rc)" "[ -x '$HOME/.local/bin/agent-tracker' ]"
+(cd "$W/agent-tracker" && bash install.sh) >"$S/log/i-tracker.log" 2>&1;      check "agent-tracker install (rc)" "[ -x '$HOME/.local/bin/agent-tracker' ]"
 (cd "$W/my-setup" && INSTALL=true bash bootstrap.sh claude_config) >"$S/log/i-mysetup.log" 2>&1
 check "my-setup writes the statusLine chain" "json '$CLAUDE_CONFIG_DIR/settings.json' \"d['statusLine']['command']\" | grep -qF '(agent-tracker tick 2>/dev/null || cat) | '"
 SL_CMD=$(json "$CLAUDE_CONFIG_DIR/settings.json" "d['statusLine']['command']")
 PATH="$S/bin:$SYS_DIRS" sh -c "$SL_CMD" < "$FAKE_CLAUDE_FIXTURE" > "$S/out/fallback.txt" 2> "$S/out/fallback.err"
 check "statusline still draws when agent-tracker is missing" "grep -q 'Opus' '$S/out/fallback.txt'"
-(cd "$W/agent-session-manager" && bash install.sh) >"$S/log/i-resume.log" 2>&1;    check "agent-resume install (ares on PATH)" "command -v ares"
+(cd "$W/agent-resume" && bash install.sh) >"$S/log/i-resume.log" 2>&1;    check "agent-resume install (ares on PATH)" "command -v ares"
 (cd "$AAC" && bash install.sh) >"$S/log/i-autoclose.log" 2>&1;                     check "agent-auto-close install" "command -v agent-auto-close"
 check "hooks: agent-tracker start/end registered" "grep -q 'agent-tracker hook start' '$CLAUDE_CONFIG_DIR/settings.json' && grep -q 'agent-tracker hook end' '$CLAUDE_CONFIG_DIR/settings.json'"
 check "hooks: agent-resume SessionStart registered" "json '$CLAUDE_CONFIG_DIR/settings.json' \"json.dumps(d['hooks']['SessionStart'])\" | grep -q 'session_start'"
@@ -127,7 +129,18 @@ check "now (boot 2) shows U1 and U2" "grep -q $U1 '$S/out/now2.json' && grep -q 
 ares tmux --no-iterm >"$S/out/restore2.txt" 2>&1
 check "a second ares tmux restores nothing more" "grep -q '0 Claude session' '$S/out/restore2.txt' && [ \$(tmux list-sessions | wc -l) -eq 1 ]"
 
-echo "== 6. cleanup and the real home"
+echo "== 6. tmux dies without a reboot (2026-11-07 15:30): ares tmux --this-boot"
+tmux kill-server; sleep 2
+check "the killed Claude sessions logged an end, reason other" "tail -1 '$D/$U1/lifecycle.jsonl' | grep -q '\"reason\": *\"other\"' && tail -1 '$D/$U2/lifecycle.jsonl' | grep -q '\"reason\": *\"other\"'"
+check "last_seen.json kept U1's pane after tmux died" "json '$D/$U1/last_seen.json' \"d['pane_id'] is not None\" | grep -q True"
+ares tmux --dry-run --no-iterm >"$S/out/plan3.txt" 2>&1
+check "plain ares tmux points to --this-boot" "grep -q -- '--this-boot' '$S/out/plan3.txt'"
+ares tmux --this-boot --no-iterm >"$S/out/restore3.txt" 2>&1; sleep 7
+check "--this-boot: alpha is back" "tmux has-session -t alpha"
+check "--this-boot: U1 and U2 running again" "tmux capture-pane -p -t alpha:0.0 | grep -q 'fake claude 11111111' && tmux capture-pane -p -t alpha:1.0 | grep -q 'fake claude 22222222'"
+check "--this-boot: U3 (closed) and U4 (exited) not restored" "! grep -q '33333333\\|44444444' '$S/out/restore3.txt'"
+
+echo "== 7. cleanup and the real home"
 for f in "$CLAUDE_CONFIG_DIR"/sessions/*.json; do kill -TERM "$(json "$f" "d['pid']")" 2>/dev/null; done; sleep 1
 tmux kill-server 2>/dev/null
 check "real home, launchd and ~/.local/bin unchanged" "[ \"\$(fp)\" = \"\$FP_BEFORE\" ]"
