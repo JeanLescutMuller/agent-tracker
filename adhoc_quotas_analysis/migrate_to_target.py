@@ -129,7 +129,7 @@ parser.add_argument("--from-machine", default="chan-lescut-macbook-pro", help="c
 args = parser.parse_args()
 
 # The schema and machine_name() come from usage_db, which reads the runtime at import.
-os.environ["AGENT_USAGE_TRACKER_RUNTIME"] = str(args.runtime)
+os.environ["AGENT_USAGE_TRACKER_RUNTIME"] = os.environ["AGENT_TRACKER_HOME"] = str(args.runtime)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import usage_db  # noqa: E402
 

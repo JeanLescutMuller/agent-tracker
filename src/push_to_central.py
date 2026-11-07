@@ -2,7 +2,7 @@
 """Sends this machine's new Category 3 rows - the `slots` of
 data/claude/aggregates/<machine>.db - to the VM (H-Frank-1), into the file
 of the same name there (doc/design.md §6.4):
-    ~/opt/agent-usage-tracker/data/claude/aggregates/<machine>.db
+    ~/opt/agent-tracker/data/claude/aggregates/<machine>.db
 Run by the Mac's `aggregates` job right after it writes the slots
 (aggregate_slots.py --send-to); the VM sends nothing (its slots are already
 there). Categories 1 and 2 never go this way: quota readings have their own
@@ -13,7 +13,7 @@ Push only: the VM never pulls (the Mac sleeps, goes offline, sits behind
 NAT). Each call sends the slots added since the last confirmed send (rowid
 above the watermark "claude/slots" in state/push/watermarks.json), in chunks,
 as JSON lines on the stdin of
-    ssh <central> python3 ~/opt/agent-usage-tracker/src/receive_from_machine.py --machine <this machine>
+    ssh <central> python3 ~/opt/agent-tracker/src/receive_from_machine.py --machine <this machine>
 which hands them to the same gate there (ingest_aggregates.py). A chunk's
 watermark advances only after the VM confirmed it; a re-sent slot is a
 no-op there. So an offline run, a crash or a dropped connection just means
@@ -38,7 +38,7 @@ WATERMARK_KEY = "claude/slots"
 CHUNK_ROWS = 20000
 SEND_TIMEOUT_S = 240  # inside the aggregates job's 5 min
 # On the VM, python3 is /usr/bin/python3; ssh runs a non-login shell.
-REMOTE_COMMAND = "python3 ~/opt/agent-usage-tracker/src/receive_from_machine.py --machine {machine}"
+REMOTE_COMMAND = "python3 ~/opt/agent-tracker/src/receive_from_machine.py --machine {machine}"
 
 
 def send(central: str, machine: str, payload: bytes) -> dict:

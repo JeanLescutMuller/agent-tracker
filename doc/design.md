@@ -1,6 +1,6 @@
-# agent-usage-tracker: design
+# agent-tracker: design
 
-Records Claude Code usage over time - quota percent, tokens, Claude Code's own $ - on the MacBook and the VM `H-Frank-1`, in four categories of data. Claude only; Codex keeps its own jobs (§13).
+agent-usage-tracker until 2026-11 (renamed when it grew the session files, §14). Records where each Claude session runs and its lifecycle (§14, the `agent-tracker` command), and Claude Code usage over time - quota percent, tokens, Claude Code's own $ - on the MacBook and the VM `H-Frank-1`, in four categories of data. Claude only; Codex keeps its own jobs (§13).
 
 | | |
 |---|---|
@@ -9,6 +9,7 @@ Records Claude Code usage over time - quota percent, tokens, Claude Code's own $
 | Words | the `## Vocabulary` table of `AGENTS.md` |
 | History | the migration plan and the record of the open questions: `git show 1ced0c4:design/MIGRATION_PLAN.md`, `git show 1ced0c4:design/OPEN_QUESTIONS.md` |
 | Changed 2026-10-12 | P13 `data/claude/intermediary.db` replaces `intermediary/claude/`; P14 one `aggregates` file per machine in `data/claude/aggregates/`, replacing `central/` (§11); built the same day, 18:45 UTC (`migrate_to_target.py data-layout`) |
+| Changed 2026-11-07 | the session files `data/sessions/<uuid>/` and the `agent-tracker` command (`tick`, `hook start\|end`, `now`, `check`), `data/<agent>/quota_latest.json`, the deploy root `~/opt/agent-tracker`; the quota jobs read last seen instead of the statusline's heartbeat (§3.4, §7.1, §14). Why: `~/dev/agent-tracker/DESIGN.md` (moves into this repo at its step 1b). Deploy: `doc/deploy_migration.md` |
 | Open work | Todoist (skill `tasks`): its tasks carry `Repo: agent-usage-tracker`; [`todo.html`](../todo.html) shows them |
 
 ## 1. The four categories, and the picture
@@ -47,7 +48,7 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 
 ## 2. Where the data lives
 
-`~/opt/agent-usage-tracker/` on each machine. Only the gates write a database: `ingest_account_quota.py`, `ingest_session_usage.py`, `ingest_aggregates.py`.
+`~/opt/agent-tracker/` on each machine. Only the gates write a database: `ingest_account_quota.py`, `ingest_session_usage.py`, `ingest_aggregates.py`.
 
 | Cat. | File | Table | One row = | Unit | From |
 |---|---|---|---|---|---|
@@ -61,7 +62,7 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 | 4 | — | — | a reader builds it from 1 + 3 | — | — |
 
 ```
-~/dev/agent-usage-tracker/          the repo (development: Mac only)
+~/dev/agent-tracker/          the repo (development: Mac only)
 ├── README.html                     the same design drawn, for Jean (the only README)
 ├── AGENTS.md                       rules for working on it, the vocabulary, which file answers what
 ├── FOR_READERS.md                  how other projects read the data
@@ -74,16 +75,21 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 ├── adhoc_quotas_analysis/          research into what the percent means; the hand-run migrations
 └── tests/                          hermetic bash suite
 
-~/opt/agent-usage-tracker/          deployed by install.sh (Mac and VM)
+~/opt/agent-tracker/          deployed by install.sh (Mac and VM)
 ├── src/                            the code
 ├── <job>.sh, <job>.conf            claude-quota, aggregates (both machines); codex-quota, codex-plan-history (Mac)
-├── data/claude/                    account_quotas.db (1), sessions_usages.db (2), intermediary.db (local, deletable)
+├── data/claude/                    account_quotas.db (1), sessions_usages.db (2), intermediary.db (local, deletable),
+│                                   quota_latest.json (the freshest reading, one small file for the statusline display)
 │   └── aggregates/                 <machine>.db (3): this machine's own; on the VM also chan-lescut-macbook-pro.db
-├── data/codex/                     Codex readings and turns (§13)
+├── data/codex/                     Codex readings and turns (§13); quota_latest.json (its freshest reading)
+├── data/sessions/<uuid>/           last_seen.json, lifecycle.jsonl: where each Claude session runs, its starts and ends (§14)
 ├── data/_archive/                  copies kept by the migrations (the old push copies included), and their log
 ├── state/                          sync/claude_quotas.json (Mac), push/watermarks.json (Mac), transcript_reader/ (Codex offsets)
-├── logs/                           otel-receiver.{log,err}; statusline_reader.err (the reader's last failure)
-└── com.jeanlescut.agent-usage-tracker.*.plist / .service / .timer   trigger files, symlinked from the OS folders
+├── logs/                           otel-receiver.{log,err}; tick-errors.log, hook-errors.log (agent-tracker's failures);
+│                                   statusline_reader.err (the compatibility wrapper's last failure)
+├── codex-plugin/, codex-marketplace/  agent-tracker's Codex hooks, registered by `codex plugin` (Mac)
+└── com.jeanlescut.agent-tracker.*.plist / .service / .timer   trigger files, symlinked from the OS folders
+~/.local/bin/agent-tracker          link to ~/opt/agent-tracker/src/agent_tracker.py
 ```
 
 ## 3. Category 1 · Quotas
@@ -138,7 +144,7 @@ claude_quota_api_poller.py --sync-with=H-Frank-1
 
 Each `claude-quota` run (tick 60 s, both machines): the sync first (Mac, when due), then **age** = now − the newest reading's `ts` in the local `account_quotas.db`. Poll `GET /api/oauth/usage` only if the age reaches the threshold:
 
-| Machine | A status line on screen here (heartbeat < 90 s) | Idle |
+| Machine | A status line on screen here (a Claude session's `last_seen.json` < 90 s old, §14) | Idle |
 |---|---|---|
 | Mac | 110 s | 300 s |
 | VM | 290 s = 110 + 120 (sync) + 60 (tick) | 480 s = 300 + 180 |
@@ -164,7 +170,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 
 ## 5. intermediary (P7, P13)
 
-`~/opt/agent-usage-tracker/data/claude/intermediary.db`, on each machine, written only by `transcript_reader.py`:
+`~/opt/agent-tracker/data/claude/intermediary.db`, on each machine, written only by `transcript_reader.py`:
 
 | Table | One row = | Columns |
 |---|---|---|
@@ -239,12 +245,19 @@ The copies of the old push (raw rows, until 2026-10-10) are in `data/_archive/`,
 
 ### 7.1 agent-statusline (P6)
 
-The two projects share two paths, each written by one side only; each works without the other.
+Since 2026-11 (deployed with the rename, `doc/deploy_migration.md`): the display holds no tracker code. my-setup's `statusLine` is `agent-tracker tick | <display>`; `tick` stores the payload (`src/statusline_usage.py`, the code of the old reader) and the display reads one file.
 
 | Interface | Written by | Read by | What |
 |---|---|---|---|
-| `~/opt/agent-usage-tracker/src/statusline_payload_reader.py` | this repo; executable, `install.sh` writes its first line (this machine's python with `-S`) and its machine name | agent-statusline's Claude provider runs it on every render | takes the raw payload on stdin, stores the reading (and the session snapshot), then prints the view `latest` as one line of six `\x1c`-separated fields: `five_pct five_reset week_pct week_reset source observed_at` (percents rounded half up). Always exits 0; on any failure it prints nothing and the status line shows its own payload's reading |
-| `~/opt/agent-statusline/state/heartbeat/{claude,codex}` | agent-statusline, every render | `claude-quota.sh`, `codex_quota_api_poller.py` | only the mtime: a status line is on screen (§3.4) |
+| `agent-tracker tick` in the `statusLine` chain | my-setup (`modules/claude_config.sh`) | Claude Code runs it every 10 s + each message | copies stdin to stdout byte for byte, then `last_seen.json`, the usage rows, `quota_latest.json` (§14) |
+| `~/opt/agent-tracker/data/claude/quota_latest.json` | this repo: `tick` (statusline readings) and the pollers (their own and synced readings), when fresher | agent-statusline's Claude provider | the account's freshest reading, `rate_limits` shape; the reader applies the reset rule (`FOR_READERS.md` §4) |
+
+Until that switch, the old interface below still works: the compatibility wrapper `statusline_payload_reader.py`.
+
+| Interface (old) | Written by | Read by | What |
+|---|---|---|---|
+| `~/opt/agent-tracker/src/statusline_payload_reader.py` | this repo; executable, `install.sh` writes its first line (this machine's python with `-S`) and its machine name | agent-statusline's Claude provider runs it on every render | takes the raw payload on stdin, stores the reading (and the session snapshot), then prints the view `latest` as one line of six `\x1c`-separated fields: `five_pct five_reset week_pct week_reset source observed_at` (percents rounded half up). Always exits 0; on any failure it prints nothing and the status line shows its own payload's reading |
+| `~/opt/agent-statusline/state/heartbeat/{claude,codex}` | agent-statusline, every render (removed 2026-11) | nobody since 2026-11: the quota jobs read `data/sessions/*/last_seen.json` (§3.4) | only the mtime: a status line is on screen |
 
 Without agent-statusline there are no statusline readings and no session snapshots: Claude Code runs a single `statusLine` command. The quota then comes from the poller only.
 
@@ -258,7 +271,7 @@ Without agent-statusline there are no statusline readings and no session snapsho
 
 ### 7.4 job-runner
 
-Every scheduled step is a job-runner job, `com.jeanlescut.agent-usage-tracker.<job>`: `jobs/<job>.sh` sources `~/opt/job-runner/lib.sh`; its dashboard settings are `jobs/<job>.conf`, deployed beside it and handed to the dashboard by `install.sh`. The retired jobs `transcripts` and `push` are marked `DECOMMISSIONED=1` on the dashboard.
+Every scheduled step is a job-runner job, `com.jeanlescut.agent-tracker.<job>`: `jobs/<job>.sh` sources `~/opt/job-runner/lib.sh`; its dashboard settings are `jobs/<job>.conf`, deployed beside it and handed to the dashboard by `install.sh`. The retired jobs `transcripts` and `push` are marked `DECOMMISSIONED=1` on the dashboard.
 
 ## 8. Jobs and services (P12)
 
@@ -268,13 +281,14 @@ Every scheduled step is a job-runner job, `com.jeanlescut.agent-usage-tracker.<j
 | `otel` (service, always on) | 2 | — | ✓ | ✓ | stores Claude Code's telemetry |
 | `aggregates` | 3 | 5 min, claim 5 min (no overlap) | ✓ compute + send | ✓ compute | transcripts → `intermediary.db` → final slots (§6.2); also reads the Codex session files (§13) |
 | `codex-quota`, `codex-plan-history` | Codex | 60 s, 1 h | ✓ | — | §13 |
-| not a job: the statusline reader | 1, 2 | every render | ✓ | ✓ | run by agent-statusline (§7.1) |
+| not a job: `agent-tracker tick` | 1, 2, sessions | every render | ✓ | ✓ | chained before the display by my-setup's `statusLine` (§7.1, §14) |
+| not a job: `agent-tracker hook start\|end` | sessions | each Claude session start and end | ✓ | ✓ | Claude Code's SessionStart / SessionEnd hooks (Codex: a plugin), registered by `install.sh` (§14) |
 
 Mac: 4 jobs + 1 service. VM: 2 jobs + 1 service.
 
 ```
 MacBook                                                              VM
-statusline render ─▶ statusline_payload_reader.py ─▶ gates 1, 2      statusline render ─▶ the same, for the VM's sessions
+statusline render ─▶ agent-tracker tick ─▶ gates 1, 2, sessions     statusline render ─▶ the same, for the VM's sessions
 claude-quota.sh ─▶ 1 sync with the VM ─▶ 2 poll if stale ─▶ gate 1   claude-quota.sh ─▶ poll if stale (longer thresholds) ─▶ gate 1
 otel: telemetry_receiver.py ─▶ gate 2                                otel: telemetry_receiver.py ─▶ gate 2
 aggregates.sh ─▶ 1 transcript_reader.py ─▶ intermediary.db           aggregates.sh ─▶ the same, without step 3
@@ -304,15 +318,16 @@ bash install.sh      # needs python3 and job-runner (~/opt/job-runner/lib.sh); L
 bash tests/run.sh    # hermetic
 ```
 
-VM deploy: rsync the repo to `~/dev/agent-usage-tracker` there, run its `install.sh`; never edit code on the VM. Never `uninstall.sh` for a layout change: a hand-run step of `adhoc_quotas_analysis/migrate_to_target.py` instead.
+VM deploy: rsync the repo to `~/dev/agent-tracker` there, run its `install.sh`; never edit code on the VM. Never `uninstall.sh` for a layout change: a hand-run step of `adhoc_quotas_analysis/migrate_to_target.py` instead.
 
 | Something looks wrong in… | Look at (on that machine) |
 |---|---|
-| any job | job-runner's dashboard `http://h-frank-1:8097`; each run's output in `~/opt/job-runner/logs/agent-usage-tracker.<job>/<machine>/`, its statuses in `~/opt/job-runner/status/agent-usage-tracker.<job>/<machine>.tsv` |
-| the quota on the status line | `logs/statusline_reader.err` (the reader's last failure; absent if it never failed), then `SELECT * FROM latest` |
+| any job | job-runner's dashboard `http://h-frank-1:8097`; each run's output in `~/opt/job-runner/logs/agent-tracker.<job>/<machine>/`, its statuses in `~/opt/job-runner/status/agent-tracker.<job>/<machine>.tsv` |
+| the quota on the status line | `data/claude/quota_latest.json`; `logs/tick-errors.log` (absent if `tick` never failed); before the switch, `logs/statusline_reader.err`; then `SELECT * FROM latest` |
+| the session files | `agent-tracker check` (one line per problem), `agent-tracker now`; `logs/tick-errors.log`, `logs/hook-errors.log` |
 | the sync | the Mac's `claude-quota` last line (`sync ↑n ↓n` or `H-Frank-1 not reached`); `state/sync/claude_quotas.json` |
 | the slots, or their copy on the VM | `python3 adhoc_quotas_analysis/migrate_to_target.py check-intermediary`; the Mac's `aggregates` last line (`sent n to H-Frank-1`); `state/push/watermarks.json` |
-| telemetry | `logs/otel-receiver.{log,err}`; `launchctl print gui/$(id -u)/com.jeanlescut.agent-usage-tracker.otel` (VM: `systemctl --user status`) |
+| telemetry | `logs/otel-receiver.{log,err}`; `launchctl print gui/$(id -u)/com.jeanlescut.agent-tracker.otel` (VM: `systemctl --user status`) |
 | a migration step | `data/_archive/migrate_to_target.log` |
 
 | File | For |
@@ -394,3 +409,25 @@ What this design changed for Codex: its rows no longer reach the VM (the push of
 | 4 · Meta-analysis | a reader's, with Codex rows |
 
 Open for that day: Codex session-file retention; usage no local file sees (cloud tasks, IDE extension, ChatGPT app), visible only account-wide (`doc/upstream.md` §4.3, §4.4); `codex-auto-review` turns (ccusage calls them `gpt-5.6-luna`: keep Codex's own name); Codex on the VM or Mac-only.
+
+## 14. Session files and the `agent-tracker` command (2026-11)
+
+The two facts about a Claude session that nobody else keeps and a crash would lose: where it runs, and its lifecycle. Formats: `FOR_READERS.md` §4 (the contract); why: `~/dev/agent-tracker/DESIGN.md` §4–§6. Code: `src/agent_tracker.py`.
+
+```
+Claude Code ──statusLine, every 10 s──▶ agent-tracker tick ──stdout (unchanged)──▶ display (agent-statusline)
+                                          ├─▶ data/sessions/<uuid>/last_seen.json   (on a change, or once a minute)
+                                          ├─▶ statusline_usage.store ─▶ gates 1, 2  (as the old reader did)
+                                          └─▶ data/claude/quota_latest.json         (when fresher)
+            ──SessionStart / SessionEnd──▶ agent-tracker hook start|end ─▶ data/sessions/<uuid>/lifecycle.jsonl
+claude-quota.sh, codex poller ──▶ last-seen-age (is a statusline on screen?) ; after each run ─▶ quota_latest.json
+the user ──▶ agent-tracker now (open Claude sessions of this boot) · agent-tracker check (is every writer writing?)
+```
+
+| Command | Reads | Writes | Measured |
+|---|---|---|---|
+| `tick` | stdin; `tmux display -p` for `$TMUX_PANE`; its parent processes (libproc / `/proc`) up to the first with `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`; the transcript's last 256 KB | `last_seen.json`, the usage rows, `quota_latest.json`; failures `logs/tick-errors.log`, exit 0 | median 42 ms in a tmux pane, 36 ms outside (2026-11-07, Mac, 20 ticks, usage recording included); budget 150 ms |
+| `hook start\|end` | stdin; `$TMUX_PANE`; the parent processes | one line < 512 bytes, `O_APPEND`, one write; prints nothing | 200 concurrent appends, 200 whole lines (test) |
+| `now [--pane %id] [--uuid U] [--json]` | the session folders, `ps`-free liveness (pid + start time), `tmux list-panes`, `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`, the transcripts' ends | nothing | — |
+| `check` | `$CLAUDE_CONFIG_DIR/sessions/*.json`, the session folders, `$CLAUDE_CONFIG_DIR/settings.json` | nothing; exit 1 on a problem | — |
+| `last-seen-age [--agent]` | the `last_seen.json` files (mtime first) | nothing | — |

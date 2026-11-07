@@ -21,7 +21,7 @@ for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]):
 }
 # read_at <epoch> - one transcript_reader run with the clock at <epoch>.
 read_at() {
-    AGENT_USAGE_TRACKER_RUNTIME="$RT" AGENT_USAGE_TRACKER_TRANSCRIPTS="$PROJ" AGENT_USAGE_TRACKER_CODEX_SESSIONS="$CODEX/sessions:$CODEX/archived_sessions" python3 -c "
+    AGENT_TRACKER_HOME="$RT" AGENT_USAGE_TRACKER_TRANSCRIPTS="$PROJ" AGENT_USAGE_TRACKER_CODEX_SESSIONS="$CODEX/sessions:$CODEX/archived_sessions" python3 -c "
 import sys, time
 sys.path.insert(0, '$REPO_ROOT/src')
 time.time = lambda: $1

@@ -16,7 +16,7 @@ on disk (cleanupPeriodDays=365 on this machine, so "durably" means about a
 year). Only log what can't be recomputed after the fact.
 
 When to poll is decided by its job-runner entrypoint claude-quota.sh
-(deployed to ~/opt/agent-usage-tracker/, run every 60 s by its trigger),
+(deployed to ~/opt/agent-tracker/, run every 60 s by its trigger),
 which passes --if-older-than: this poller skips (exit 10) while the
 account's newest reading, any source, any machine, is younger than that
 (doc/design.md §3.4). A 429 waits out its Retry-After on this
@@ -35,6 +35,10 @@ state/sync/claude_quotas.json and advance only once both sides stored
 everything. The VM unreachable: the sync waits for the next run and the
 summary says so; it becomes a failure (exit 1) once the last successful
 sync is older than SYNC_STALE_S.
+
+After every run, the account's newest reading (any source, any machine) is
+offered to data/claude/quota_latest.json (offer_latest), the one file the
+statusline display reads.
 
 Exit codes: 0 a reading, its summary last ("5h 42% · 7d 18%"); 10 fresh
 enough, no poll; 75 a 429; 1 any other failure (401, network..., or a
@@ -68,7 +72,7 @@ CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
 
 # The VM's account gate, run over ssh (a non-login shell: python3 is
 # /usr/bin/python3 on the VM, as for push_to_central.py).
-SYNC_COMMAND = "python3 ~/opt/agent-usage-tracker/src/ingest_account_quota.py --agent claude --sync-from={me} --after={after}"
+SYNC_COMMAND = "python3 ~/opt/agent-tracker/src/ingest_account_quota.py --agent claude --sync-from={me} --after={after}"
 SYNC_STATE = usage_db.RUNTIME_DIR / "state" / "sync" / "claude_quotas.json"
 SYNC_TIMEOUT_S = 30
 SYNC_STALE_S = 1800  # a sync failing longer than this fails the job
@@ -273,5 +277,20 @@ def main(argv: list[str] | None = None) -> None:
     sys.exit(1)
 
 
+def offer_latest() -> None:
+    """After every run, whatever its outcome (a reading, a skip, a sync that
+    brought the VM's readings): the account's newest reading to
+    data/claude/quota_latest.json, if fresher than the one there
+    (agent_tracker.offer_quota_from_db). Never fails the run."""
+    try:
+        import agent_tracker
+        agent_tracker.offer_quota_from_db("claude")
+    except Exception as exc:
+        print(f"quota_latest.json not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        offer_latest()

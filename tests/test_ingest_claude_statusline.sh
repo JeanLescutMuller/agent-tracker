@@ -17,8 +17,8 @@ SEP=$'\034'
 TH_HOME="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-ingesthome.XXXXXX")"
 trap 'rm -rf "$TH_HOME"' EXIT
 # Every python call of this file writes here, never into the real ~/opt (on 2026-10-10 a call without HOME did).
-export AGENT_USAGE_TRACKER_RUNTIME="$TH_HOME/opt/agent-usage-tracker"
-DATA_DIR="$TH_HOME/opt/agent-usage-tracker/data/claude"
+export AGENT_TRACKER_HOME="$TH_HOME/opt/agent-tracker"
+DATA_DIR="$TH_HOME/opt/agent-tracker/data/claude"
 ADB="$DATA_DIR/account_quotas.db"
 SDB="$DATA_DIR/sessions_usages.db"
 TRANSCRIPT="$TH_HOME/transcript.jsonl"
@@ -158,7 +158,7 @@ run_push "$TRANSCRIPT" 42 "" 55 "" "sess-1" 0.5 "" "claude-opus-5-5"
 assert_status "exits 0" 0 "$TH_STATUS"
 assert_eq "one account row for three renders" "1" "$(row_count)"
 assert_eq "one session snapshot for three renders" "1" "$(snapshots sess-1)"
-assert_file_missing "no dedup key files any more: the database is the memory" "$TH_HOME/opt/agent-usage-tracker/state/ingest"
+assert_file_missing "no dedup key files any more: the database is the memory" "$TH_HOME/opt/agent-tracker/state/ingest"
 
 section "another session seeing the same reading is its own observation"
 run_push "$TRANSCRIPT" 42 "" 55 "" "sess-2" 0.1 "" "claude-opus-5-5"
@@ -274,7 +274,7 @@ run_push "$TRANSCRIPT" 10 "" 20 "" "sess-1" 0.5 ""
 assert_contains "absent -> null" "$(snapshot_raw sess-1)" '"prompt_cache":null'
 
 section "a working run logs no error"
-assert_file_missing "no error log after all the runs above" "$TH_HOME/opt/agent-usage-tracker/logs/statusline_reader.err"
+assert_file_missing "no error log after all the runs above" "$TH_HOME/opt/agent-tracker/logs/statusline_reader.err"
 
 section "a payload that is not JSON -> exits 0, writes nothing"
 reset
@@ -282,8 +282,8 @@ th_run bash -c "printf 'garbage' | python3 '$INGEST'"
 assert_status "exits 0" 0 "$TH_STATUS"
 assert_eq "prints nothing (no reading anywhere), no error" "" "$TH_OUT$TH_ERR"
 assert_contains "...but the failure is logged for troubleshooting, with its traceback" \
-    "$(cat "$TH_HOME/opt/agent-usage-tracker/logs/statusline_reader.err")" "storing the payload failed"
-assert_contains "...the error itself" "$(cat "$TH_HOME/opt/agent-usage-tracker/logs/statusline_reader.err")" "JSONDecodeError"
+    "$(cat "$TH_HOME/opt/agent-tracker/logs/statusline_reader.err")" "storing the payload failed"
+assert_contains "...the error itself" "$(cat "$TH_HOME/opt/agent-tracker/logs/statusline_reader.err")" "JSONDecodeError"
 assert_eq "prints nothing" "" "$TH_OUT"
 
 section "real time: the line printed already holds the reading of this very payload"
@@ -309,7 +309,7 @@ import ingest_account_quota as g, usage_db
 g.add_row(usage_db.open_account('claude'), 'claude', {'ts': $now + 60, 'source': 'claude_api', 'machine': 't-mac',
     'api': {'five_hour': {'utilization': 61.5, 'resets_at': $now - 5}, 'seven_day': {'utilization': 33.2, 'resets_at': $now + 3600}}})"
 assert_eq "a passed 5h reset: 0 and no reset; the 7d one rounded, its reset kept" "0${SEP}${SEP}33${SEP}$((now + 3600))${SEP}claude_api${SEP}$((now + 60))" "$(read_latest)"
-assert_eq "no database: prints nothing, exits 0" "0:" "$(printf '{}' | AGENT_USAGE_TRACKER_RUNTIME="$TH_HOME/none" python3 "$READER"; echo "$?:")"
+assert_eq "no database: prints nothing, exits 0" "0:" "$(printf '{}' | AGENT_TRACKER_HOME="$TH_HOME/none" python3 "$READER"; echo "$?:")"
 assert_eq "not JSON at all: still prints the reading" "6" "$(read_latest 'not json' | awk -F "$SEP" '{print NF}')"
 
 harness_summary

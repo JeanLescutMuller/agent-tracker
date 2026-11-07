@@ -19,7 +19,7 @@ for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]):
 session_rows() { q "SELECT COUNT(*) FROM telemetry WHERE session_id = '$SID'"; }
 unattributed_rows() { q "SELECT COUNT(*) FROM telemetry WHERE session_id IS NULL"; }
 PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
-AGENT_USAGE_TRACKER_RUNTIME="$TH_TMP2" python3 "$REPO_ROOT/src/telemetry_receiver.py" --port "$PORT" >/dev/null 2>"$TH_TMP2/err" &
+AGENT_TRACKER_HOME="$TH_TMP2" python3 "$REPO_ROOT/src/telemetry_receiver.py" --port "$PORT" >/dev/null 2>"$TH_TMP2/err" &
 PID=$!
 trap 'kill "$PID" 2>/dev/null; rm -rf "$TH_TMP2"' EXIT
 for _ in $(seq 1 50); do curl -s -o /dev/null "http://127.0.0.1:$PORT/" 2>/dev/null && break; sleep 0.1; done

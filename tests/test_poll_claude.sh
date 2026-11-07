@@ -40,7 +40,7 @@ assert_eq "URLError stays a network error" "network URLError" \
 # attempts> <latest view's source, or none>".
 poll_once() {
     local dir; dir="$(mktemp -d "${TMPDIR:-/tmp}/th-poll.XXXXXX")"
-    AGENT_USAGE_TRACKER_RUNTIME="$dir" python3 -c "
+    AGENT_TRACKER_HOME="$dir" python3 -c "
 import sys
 from pathlib import Path
 sys.path.insert(0, '$SRC_DIR')
@@ -68,22 +68,22 @@ assert_eq "429 -> no reading, one failed attempt, nothing in latest" "0 1 none" 
     "$(poll_once "(None, None, {'stage': 'http', 'status': 429})")"
 
 # A fake ssh: runs the remote command locally as machine "vm", with
-# HOME=$PEER_HOME, whose ~/opt/agent-usage-tracker/src is this repo's src/;
+# HOME=$PEER_HOME, whose ~/opt/agent-tracker/src is this repo's src/;
 # PEER_HOME=down: unreachable. The local machine is "mac".
 FAKE="$(mktemp -d "${TMPDIR:-/tmp}/th-peer.XXXXXX")"
 trap 'rm -rf "$FAKE"' EXIT
-mkdir -p "$FAKE/bin" "$FAKE/peer/opt/agent-usage-tracker"
-ln -s "$SRC_DIR" "$FAKE/peer/opt/agent-usage-tracker/src"
+mkdir -p "$FAKE/bin" "$FAKE/peer/opt/agent-tracker"
+ln -s "$SRC_DIR" "$FAKE/peer/opt/agent-tracker/src"
 cat > "$FAKE/bin/ssh" <<'SSH'
 #!/bin/bash
 while [ "$1" = -o ]; do shift 2; done
 [ "$PEER_HOME" = down ] && exit 255
 echo "a login banner"                 # what a login script may print first
-env -u AGENT_USAGE_TRACKER_RUNTIME HOME="$PEER_HOME" JR_MACHINE_NAME=vm bash -c "$2"   # a real ssh passes no environment
+env -u AGENT_TRACKER_HOME HOME="$PEER_HOME" JR_MACHINE_NAME=vm bash -c "$2"   # a real ssh passes no environment
 SSH
 chmod +x "$FAKE/bin/ssh"
-LOCAL="$FAKE/local/opt/agent-usage-tracker"
-PEER="$FAKE/peer/opt/agent-usage-tracker"
+LOCAL="$FAKE/local/opt/agent-tracker"
+PEER="$FAKE/peer/opt/agent-tracker"
 export PEER_HOME="$FAKE/peer"
 peer_db() { python3 -c "
 import sqlite3, sys
@@ -97,7 +97,7 @@ print(*d.execute(sys.argv[1]).fetchone(), sep='\t')" "$1"; }
 # poll <fetch_usage return expression> [poller args...] -> "<exit code> <last line>"; the local runtime is $LOCAL
 poll() {
     local expr="$1"; shift
-    out="$(PATH="$FAKE/bin:$PATH" AGENT_USAGE_TRACKER_RUNTIME="$LOCAL" JR_MACHINE_NAME=mac python3 -c "
+    out="$(PATH="$FAKE/bin:$PATH" AGENT_TRACKER_HOME="$LOCAL" JR_MACHINE_NAME=mac python3 -c "
 import sys
 sys.path.insert(0, '$SRC_DIR')
 import claude_quota_api_poller as poll_claude
@@ -128,7 +128,7 @@ section "--sync-with: each machine's own readings, both ways, in one ssh call"
 # The VM's own reading (1 s after the Mac's, so it is the newest), and one from before 2026-10-10
 # (no machine in raw; labelled by the migration).
 sleep 1
-JR_MACHINE_NAME=vm AGENT_USAGE_TRACKER_RUNTIME="$PEER" python3 -c "
+JR_MACHINE_NAME=vm AGENT_TRACKER_HOME="$PEER" python3 -c "
 import sys, time; sys.path.insert(0, '$SRC_DIR')
 import ingest_account_quota as g, usage_db
 db = usage_db.open_account('claude')

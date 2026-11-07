@@ -12,7 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-analysis.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
-export AGENT_USAGE_TRACKER_RUNTIME="$TMP/rt" JR_MACHINE_NAME=m1
+export AGENT_TRACKER_HOME="$TMP/rt" JR_MACHINE_NAME=m1
 A="$REPO_ROOT/adhoc_quotas_analysis"
 
 python3 - "$REPO_ROOT/src" <<'PY'

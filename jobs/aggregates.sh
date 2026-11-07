@@ -1,5 +1,5 @@
 #!/bin/bash
-# ~/opt/agent-usage-tracker/aggregates.sh: job agent-usage-tracker.aggregates.
+# ~/opt/agent-tracker/aggregates.sh: job agent-tracker.aggregates.
 # Requirements (doc/design.md §6, §8):
 #   - Claude transcripts -> data/claude/intermediary.db (each request once) -> the final 5-min slots ->
 #     data/claude/aggregates/<machine>.db;

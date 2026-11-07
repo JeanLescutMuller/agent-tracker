@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.jeanlescut.agent-usage-tracker.otel</string>
+    <string>com.jeanlescut.agent-tracker.otel</string>
 
     <!-- A long-running receiver, not a periodic job: Claude Code pushes
          telemetry to it, so it must be listening whenever a Claude session

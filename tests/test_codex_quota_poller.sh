@@ -9,7 +9,7 @@ RT="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-codexq.XXXXXX")"
 trap 'rm -rf "$RT"' EXIT
 
 section "no codex binary -> skip, exit 10"
-out="$(AGENT_USAGE_TRACKER_RUNTIME="$RT" python3 -c "
+out="$(AGENT_TRACKER_HOME="$RT" python3 -c "
 import sys
 sys.path.insert(0, '$REPO_ROOT/src')
 import codex_quota_api_poller as m

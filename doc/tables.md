@@ -1,10 +1,10 @@
-# Tables: every row agent-usage-tracker stores, field by field
+# Tables: every row agent-tracker stores, field by field
 
 What each table holds, which collector fills it from which upstream source, and the traps in the rows. Why it is built this way, where each file lives and which job runs when: `doc/design.md`. What exists upstream, captured or not: `doc/upstream.md`, cited here as "Upstream §n". How another project reads it: `FOR_READERS.md`. When a row's shape changed: `doc/changes.md`.
 
 Markers: **[verified]** was measured on this machine's data; **[docs]** comes from official documentation.
 
-*Last verified: 2026-10-12 (P13 + P14 on both machines: the slots equal a separate count of every request, Mac 3,331 / VM 41, the VM's copy of the Mac's identical). Earlier verifications: `doc/changes.md`.*
+*Last verified: 2026-11-07 (the statusline recording moved into `agent-tracker tick`, rows unchanged: `tests/test_agent_tracker.sh`, `tests/test_ingest_claude_statusline.sh`); before that 2026-10-12 (P13 + P14 on both machines: the slots equal a separate count of every request, Mac 3,331 / VM 41, the VM's copy of the Mac's identical). Earlier verifications: `doc/changes.md`.*
 
 ---
 
@@ -31,7 +31,7 @@ When each runs: `doc/design.md` §8.
 
 | Collector | Upstream source | Writes (through its gate) |
 |---|---|---|
-| **Statusline reader**: `src/statusline_payload_reader.py`, run by agent-statusline on every Claude render | Statusline stdin (Upstream §3.1) | `account_quotas` + `session_snapshots` (both `source: "claude_statusline"`); prints the `latest` line |
+| **Statusline reader**: `src/statusline_usage.py`, run by `agent-tracker tick` on every Claude render (until the statusline switch also by the wrapper `src/statusline_payload_reader.py`, which prints the `latest` line) | Statusline stdin (Upstream §3.1) | `account_quotas` + `session_snapshots` (both `source: "claude_statusline"`); `tick` also offers the reading to `data/claude/quota_latest.json` (`FOR_READERS.md` §4) |
 | **Claude poller**: `src/claude_quota_api_poller.py` | `GET /api/oauth/usage` (Upstream §3.5) | `account_quotas` (`source: "claude_api"`) or `poll_errors` |
 | **Codex poller**: `src/codex_quota_api_poller.py` | app-server `account/rateLimits/read` + `account/usage/read` (Upstream §4.3) | codex `account_quotas` (`source: "codex_app_server"`) or `poll_errors` |
 | **Codex plan-history poller**: `src/codex_plan_history_poller.py` | ChatGPT backend `plan_limit_history?days=7` (Upstream §4.4) | codex `account_quotas` (`source: "codex_plan_limit_history"`) or `poll_errors` |

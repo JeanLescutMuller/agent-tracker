@@ -1,5 +1,5 @@
 """What every analysis here reads, loaded the way FOR_READERS.md says: read-only,
-from the runtime (~/opt/agent-usage-tracker, or AGENT_USAGE_TRACKER_RUNTIME).
+from the runtime (~/opt/agent-tracker, or AGENT_TRACKER_HOME; the old AGENT_USAGE_TRACKER_RUNTIME is still honoured).
 
   readings()  Category 1: every Claude quota reading, both machines' (the same rows on each)
   windows()   the 5-hour or 7-day windows rebuilt from the readings, one per plan x reset time
@@ -14,7 +14,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-RUNTIME = Path(os.environ.get("AGENT_USAGE_TRACKER_RUNTIME") or "~/opt/agent-usage-tracker").expanduser()
+RUNTIME = Path(os.environ.get("AGENT_TRACKER_HOME") or os.environ.get("AGENT_USAGE_TRACKER_RUNTIME") or "~/opt/agent-tracker").expanduser()
 SPAN_S = {"5h": 5 * 3600, "7d": 7 * 86400}
 # Reset times jitter by a second between readings (…8999 / …9000) and Claude rounds a 5-hour end to
 # 10 min, a 7-day end to the hour: one window = one reset time on this grid.

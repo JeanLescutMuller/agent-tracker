@@ -2,7 +2,7 @@
 """On the VM: receives the Category 3 rows another machine's
 push_to_central.py sends - its `slots`, JSON lines on stdin, over ssh - and
 hands them to the gate of that machine's own file (doc/design.md §6.4):
-    ~/opt/agent-usage-tracker/data/claude/aggregates/<machine>.db
+    ~/opt/agent-tracker/data/claude/aggregates/<machine>.db
 One file per machine (P14), so the copies never conflict, and deleting one
 resets only that machine's slots. A slot already stored is a no-op, so a
 re-sent chunk changes nothing. Until 2026-10-10 this received every row of

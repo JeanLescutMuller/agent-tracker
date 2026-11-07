@@ -5,6 +5,10 @@
 # harness_summary at the end (exits 0 if everything passed, 1 otherwise).
 set -uo pipefail
 
+# Nothing from the caller's environment may point a test at a real tree: not
+# the tmux server of the shell running the tests (TMUX, TMUX_PANE: the user's
+# live Claude sessions), not a Claude config or a runtime. Tests set their own.
+unset TMUX TMUX_PANE CLAUDE_CONFIG_DIR AGENT_TRACKER_HOME AGENT_USAGE_TRACKER_RUNTIME AGENT_TRACKER_BOOT_TS
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 source "$REPO_ROOT/utils.sh"

@@ -11,7 +11,7 @@ taken (2026-10) keep growing, so a difference there is expected. Results are rec
 """
 import collections, glob, json, os, sqlite3, statistics
 
-DATA_DIR = os.path.expanduser('~/opt/agent-usage-tracker/data')
+DATA_DIR = os.path.expanduser('~/opt/agent-tracker/data')
 CLAUDE_GLOB = os.path.expanduser('~/.claude/projects/**/*.jsonl')
 CODEX_GLOBS = [os.path.expanduser(p) for p in ('~/.codex/sessions/**/*.jsonl', '~/.codex/archived_sessions/**/*.jsonl')]
 
