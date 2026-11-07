@@ -32,6 +32,13 @@ LABELS="com.jeanlescut.agent-tracker.otel"
 for job in $JOBS; do LABELS="$LABELS com.jeanlescut.agent-tracker.$job"; done
 SYSTEMD_USER="$HOME/.config/systemd/user"
 OS="${AGENT_TRACKER_OS:-$(uname -s)}"
+# Sandbox: when $HOME is not the user's real home (tests), touch nothing outside $HOME:
+# no launchctl / systemctl, no `codex` call (same rule as agent-resume's install.sh).
+REAL_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
+if [ "$HOME" != "$REAL_HOME" ]; then
+    export AGENT_TRACKER_SKIP_LAUNCHD=1 AGENT_TRACKER_CODEX_BIN=/nonexistent/codex
+    echo "  (sandbox HOME=$HOME: no launchctl / systemctl / codex call)"
+fi
 CODEX_BIN="${AGENT_TRACKER_CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
 
 echo -e "${GREEN}========================================${NC}"
