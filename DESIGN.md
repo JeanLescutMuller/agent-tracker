@@ -145,7 +145,7 @@ Each `agent-tracker …` is a command (a small CLI): programs call it with `--js
 | agent-tracker's quota job (no command) | "is a statusline on screen?" | machine: launchd, 60 s | 1,440 / day | newest `ts` among the current boot's `last_seen.json` | seconds |
 | `ares resume` | find and reopen a past Claude session | you · agents | you 33 + agents 19 in 30 days ≈ 1.7 / day | agent-resume's index, refreshed for changed transcripts | the user waits: < 1 s |
 | `agent-tracker now` | prints open Claude sessions: pane, folder, busy/idle, last prompt (the visibility view) | the user | new: no program reads it (cc-map 23 + cc-rc 20 runs in 30 days, both parked, §10) | ~14 `last_seen.json`, live files, ~14 transcript ends | the user waits: < 1 s |
-| `ares tmux` (asm) | finds what was open at the crash, then puts back every tmux session, window and pane size, `claude --resume` in each Claude pane, one iTerm2 tab per tmux session | you, after a crash | 2 in 25 days (today's terminal_snapshot: agents ran it 9 times in 30 days) | the previous boot's `lifecycle.jsonl` + `last_seen.json` → acts on tmux and iTerm2 | none |
+| `ares tmux` (agent-resume) | finds what was open at the crash, then puts back every tmux session, window and pane size, `claude --resume` in each Claude pane, one iTerm2 tab per tmux session | you, after a crash | 2 in 25 days (today's terminal_snapshot: agents ran it 9 times in 30 days) | the previous boot's `lifecycle.jsonl` + `last_seen.json` → acts on tmux and iTerm2 | none |
 | `agent-tracker check` | says whether every writer is writing on this machine (statusLine chained, hooks installed, a fresh `last_seen.json` for each open Claude session) | you, after installing on a machine; later maybe a job-runner canary | new: not measured | `~/.claude/sessions`, `data/`, `~/.claude/settings.json` · writes nothing | none |
 
 So `tick` is the most frequent write and agent-notify the most frequent read: `tick` rewrites `last_seen.json` only when the pane or folder changed, or once a minute (a 1-minute-old position is enough for a restore done every ~2 weeks), and agent-notify reads one file by UUID, never `now`.
@@ -172,20 +172,20 @@ Claude Code runs one `statusLine` command; the key is owned by my-setup (`module
 
 | Project | Deletes | Keeps |
 |---|---|---|
-| agent-resume (was asm) | its SessionStart/SessionEnd hooks and `data/lifecycles/` (moved to agent-tracker's `lifecycle.jsonl`); `session_state` (→ lifecycle); maybe its 1800 s job (→ refresh at search time) | search and its index (decided: stays in asm), VM sync, resume, close; gains `ares tmux` |
+| agent-resume (was asm) | its SessionStart/SessionEnd hooks and `data/lifecycles/` (moved to agent-tracker's `lifecycle.jsonl`); `session_state` (→ lifecycle); maybe its 1800 s job (→ refresh at search time) | search and its index (decided: stays in agent-resume), VM sync, resume, close; gains `ares tmux` |
 | agent-notify | its `/tmp` copy of shell PID, agent PID, pane, UUID, cwd | its states and colors, its own hooks |
 | statusline | the per-agent heartbeat (→ newest `last_seen.json` ts); its call to `statusline_payload_reader.py` (→ `tick`) | the display, reading `data/claude/quota_latest.json` |
 | usage-tracker | its name (→ agent-tracker); reading the heartbeat | everything else: databases, OTel receiver, aggregates, quota polls, `FOR_READERS.md` |
 | my-setup | cc-map, cc-rc and the skill claude-sessions-overview (parked, §10); `tools/terminal_snapshot.py` (→ `ares tmux`); resurrect + continuum (once `ares tmux` works) | the Chrome kit; the `statusLine` chain (§6) |
 
-**The crash restore (decided, the user, 2026-11-07):** it moves to asm as `ares tmux` ("agent-resume finds and resumes: one Claude session or a whole setup"). It reads the previous boot's `lifecycle.jsonl` and `last_seen.json` directly (the rule above), recreates each tmux session and window, applies each window's saved `window_layout` (exact pane sizes), types `claude --resume <uuid>` in each Claude pane, opens plain-shell panes in `~` (their folder is not recorded), and opens one iTerm2 tab per tmux session. **Rejected:** Claude panes only, split evenly (loses pane sizes and plain shells); a full snapshot of tmux and iTerm2 on a timer (exact, but one more writer and 288 runs a day). my-setup's `terminal_snapshot.py` (2026-11-01) and resurrect + continuum (2026-11-07) are removed once it works.
+**The crash restore (decided, the user, 2026-11-07):** it moves to agent-resume as `ares tmux` ("agent-resume finds and resumes: one Claude session or a whole setup"). It reads the previous boot's `lifecycle.jsonl` and `last_seen.json` directly (the rule above), recreates each tmux session and window, applies each window's saved `window_layout` (exact pane sizes), types `claude --resume <uuid>` in each Claude pane, opens plain-shell panes in `~` (their folder is not recorded), and opens one iTerm2 tab per tmux session. **Rejected:** Claude panes only, split evenly (loses pane sizes and plain shells); a full snapshot of tmux and iTerm2 on a timer (exact, but one more writer and 288 runs a day). my-setup's `terminal_snapshot.py` (2026-11-01) and resurrect + continuum (2026-11-07) are removed once it works.
 
 ## 8. Scope: what agent-tracker owns, and what stays apart (all decided 2026-11-07)
 
 | Data | In agent-tracker? | If it stays apart | For joining | For staying apart |
 |---|---|---|---|---|
 | where it runs, lifecycle, last seen | yes, the core | — | copied 4 times today | — |
-| agent-resume's search index (title, text) | **no: stays in asm** (decided, the user, 2026-11-07: only `ares resume` uses it, to search faster) | asm, refreshed at search time | | |
+| agent-resume's search index (title, text) | **no: stays in agent-resume** (decided, the user, 2026-11-07: only `ares resume` uses it, to search faster) | agent-resume, refreshed at search time | | |
 | the crash restore | **no: `ares tmux`** (decided, the user, 2026-11-07) | agent-resume (was asm) | | agent-tracker only says what was where |
 | tokens, cost, quotas | **yes: merged** (decided, the user, 2026-11-07) | — | same role (data layer), same tick, same UUID key | — |
 | pane colors | no | agent-notify | | display, not tracking |
@@ -198,7 +198,7 @@ Claude Code runs one `statusLine` command; the key is owned by my-setup (`module
 | 1 | this design, reviewed | — | the user says yes |
 | 1b | rename agent-usage-tracker → agent-tracker (GitHub repo, `~/dev`, `~/opt`, launchd labels, the VM, every reader's path); move these design files into it; this temporary `~/dev/agent-tracker` folder goes, with the user's OK | agent-usage-tracker, agent-statusline, readers | everything works under the new name; `check` is green |
 | 2 | `tick` + `hook start|end` + my-setup's chain, beside today's streams; nothing removed | agent-tracker, my-setup | a `data/sessions/<uuid>/` folder with both files for every Claude session, for 2 days |
-| 3 | `now` and `check` (agent-tracker); `ares tmux` (asm); then remove `terminal_snapshot.py` and resurrect + continuum | agent-tracker, agent-resume, my-setup | a killed test tmux gets its windows, pane sizes and Claude sessions back |
+| 3 | `now` and `check` (agent-tracker); `ares tmux` (agent-resume); then remove `terminal_snapshot.py` and resurrect + continuum | agent-tracker, agent-resume, my-setup | a killed test tmux gets its windows, pane sizes and Claude sessions back |
 | 4 | asm → agent-resume (`ares`): index refreshed at search time; `asm close` → agent-auto-close; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job | agent-resume (was asm) | `ares resume --state pending` gives the same list, with no lag |
 | 5 | agent-notify and the agent-tracker's quota job read it; their copies removed; cc-map, cc-rc and the skill parked; asm's `status` removed | each repo | each one's tests pass |
 
