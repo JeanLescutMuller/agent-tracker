@@ -36,8 +36,13 @@ OS="${AGENT_TRACKER_OS:-$(uname -s)}"
 # no launchctl / systemctl, no `codex` call (same rule as agent-resume's install.sh).
 REAL_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
 if [ "$HOME" != "$REAL_HOME" ]; then
-    export AGENT_TRACKER_SKIP_LAUNCHD=1 AGENT_TRACKER_CODEX_BIN=/nonexistent/codex
-    echo "  (sandbox HOME=$HOME: no launchctl / systemctl / codex call)"
+    # A test's fake codex inside the sandbox HOME (a file, not a link out of it) stays; anything else: none.
+    case "${AGENT_TRACKER_CODEX_BIN:-}" in
+        "$HOME"/*) [ -L "$AGENT_TRACKER_CODEX_BIN" ] && AGENT_TRACKER_CODEX_BIN=/nonexistent/codex ;;
+        *) AGENT_TRACKER_CODEX_BIN=/nonexistent/codex ;;
+    esac
+    export AGENT_TRACKER_SKIP_LAUNCHD=1 AGENT_TRACKER_CODEX_BIN
+    echo "  (sandbox HOME=$HOME: no launchctl / systemctl; codex only a fake inside it)"
 fi
 CODEX_BIN="${AGENT_TRACKER_CODEX_BIN:-$(command -v codex 2>/dev/null || true)}"
 
