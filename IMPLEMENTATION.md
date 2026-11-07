@@ -85,3 +85,17 @@ A reader ignores a line of `lifecycle.jsonl` without its final newline. Fixture 
 - Docs updated in the repo's own conventions (README / AGENTS.md / FOR_READERS.md), using the four names.
 - One or more commits on `agent-tracker-v1` (agent-auto-close: `main`), never pushed.
 - A report to the coordinator, ≤ 300 words: what changed (files), test results (numbers), what was left out and why, anything the deploy step must do (migrations, renames).
+
+## 7. Status (2026-11-07): built and tested, not deployed
+
+| Repo | Branch tip | Its own tests (sandbox) | Notes |
+|---|---|---|---|
+| agent-usage-tracker → agent-tracker | `719c653` | 626 pass (490 before) | tick median 42 ms (budget 150); install skips launchd/codex in a sandbox by itself (`be5c156`) |
+| agent-session-manager → agent-resume | `f34a743` | 65 pass (smoke 41) | search-time refresh ≈ 65 ms on 3,111 real transcripts; resume warnings, SessionEnd sync and Codex hooks kept |
+| agent-auto-close (new) | `494a91b` | 76 pass | no scheduler |
+| agent-statusline | `4a8360c` | 302 pass | display only |
+| my-setup | `5fbca76` | claude_config 13, retired 16, chrome kit 163 | chain falls back to `cat` without agent-tracker (`d6fe249`) |
+| agent-notify | `6e34ba9` | 65 + 3 unittest | static.env: 10 fields → 3 |
+| integration (this repo) | `tests/integration.sh` | **38 pass, 0 fail** | install all, 4 fake Claude sessions, exit, close, crash, new boot, `ares tmux`, real home unchanged |
+
+Deploy: [`DEPLOY.md`](DEPLOY.md).
