@@ -13,7 +13,7 @@ ADB="$RT/data/claude/account_quotas.db"
 SEP=$'\034'
 
 # ingest <agent> [flags] <<< rows - the gate's command line.
-ingest() { AGENT_USAGE_TRACKER_RUNTIME="$RT" python3 "$SRC_DIR/ingest_account_quota.py" --agent "$@" 2>/dev/null; }
+ingest() { AGENT_TRACKER_HOME="$RT" python3 "$SRC_DIR/ingest_account_quota.py" --agent "$@" 2>/dev/null; }
 q() {
     python3 -c 'import sqlite3, sys
 for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]):

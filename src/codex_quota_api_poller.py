@@ -22,7 +22,7 @@ ids and isn't part of "the current rate-limit snapshot", the same
 "unrecoverable" bar claude_quota_api_poller.py applies. That's future work for a
 Codex reader of ~/.codex/sessions, not this poller.
 
-Its trigger ticks every 60s (com.jeanlescut.agent-usage-tracker.codex-quota,
+Its trigger ticks every 60s (com.jeanlescut.agent-tracker.codex-quota,
 running the job-runner entrypoint codex-quota.sh). A skip exits 10 after
 its "skip: ..." line, so job-runner records a Skip, not a success. Three
 cadence tiers, checked in order, mirroring the Claude poller's
@@ -37,9 +37,9 @@ adding a tier it has no equivalent of:
    equivalent tier - Claude Code's in-memory rate-limit state is never
    written to disk on its own (see statusline_payload_reader.py), so
    polling is Claude's *only* source of truth even mid-session.
-2. Otherwise, the Codex statusline's heartbeat/codex file (written by the
-   separate agent-statusline project, same shape as heartbeat/claude) is
-   fresh within
+2. Otherwise, a Codex session's last_seen.json (data/sessions/<uuid>/,
+   written by `agent-tracker tick --agent codex`; agent_tracker.newest_seen_age;
+   until 2026-11 the statusline's own per-agent heartbeat file) is fresh within
    HEARTBEAT_ACTIVE_WINDOW_SECONDS - a statusline is open and idle, so the
    local file above is stale, but someone is watching and other
    sessions/devices on the account can still move the meter. Poll at
@@ -56,8 +56,11 @@ adding a tier it has no equivalent of:
    dark for long unattended stretches, not to catch anything reliably.
 
 Deliberately no dependency on claude_quota_api_poller.py for any of this - only on
-agent-statusline's heartbeat file, read-only, which degrades gracefully to
-tier 3 if the statusline is not installed.
+agent-tracker's own last_seen.json files, read-only, which degrades gracefully to
+tier 3 while no Codex statusline calls `agent-tracker tick`.
+
+After every run, the account's newest reading is offered to
+data/codex/quota_latest.json (same shape as Claude's, FOR_READERS.md §4).
 """
 import json
 import shutil
@@ -66,11 +69,11 @@ import sys
 import time
 from pathlib import Path
 
+import agent_tracker
 import ingest_account_quota
 import usage_db
 
 SESSIONS_DIR = Path.home() / ".codex" / "sessions"
-HEARTBEAT_FILE = Path.home() / "opt" / "agent-statusline" / "state" / "heartbeat" / "codex"
 
 # See the module docstring for the three-tier gating these constants drive.
 SESSION_FRESH_SECONDS = 300
@@ -170,15 +173,6 @@ def fetch_codex_state() -> tuple[dict | None, dict | None, dict | None]:
             proc.kill()
 
 
-def is_fresh(path: Path, window_seconds: float, now: float) -> bool:
-    """True if `path`'s mtime is within window_seconds of now; a missing file
-    is not fresh."""
-    try:
-        return (now - path.stat().st_mtime) < window_seconds
-    except OSError:
-        return False
-
-
 def _last_codex_log_ts() -> int | None:
     """When this poller last tried, reading or failure."""
     d_row = ingest_account_quota.last_attempt(usage_db.open_account("codex", readonly=True), ("codex_app_server",))
@@ -223,7 +217,7 @@ def main() -> None:
         print(f"skip: a Codex session file was modified under {SESSION_FRESH_SECONDS}s ago "
               f"- local rate_limits snapshot is already fresher than a poll would be")
         sys.exit(10)
-    is_watched = is_fresh(HEARTBEAT_FILE, HEARTBEAT_ACTIVE_WINDOW_SECONDS, now)
+    is_watched = agent_tracker.newest_seen_age("codex", now) < HEARTBEAT_ACTIVE_WINDOW_SECONDS
     threshold = WATCHED_POLL_INTERVAL_SECONDS if is_watched else IDLE_POLL_INTERVAL_SECONDS
     last_ts = _last_codex_log_ts()
     if last_ts is not None and (now - last_ts) < threshold:
@@ -245,4 +239,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:   # whatever the outcome; never fails the run
+        try:
+            agent_tracker.offer_quota_from_db("codex")
+        except Exception as exc:
+            print(f"quota_latest.json not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)

@@ -11,13 +11,13 @@ RT="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-sgate.XXXXXX")"
 trap 'rm -rf "$RT"' EXIT
 AGENT=claude SDB="$RT/data/claude/sessions_usages.db"   # switched to Codex for requests and their views (Codex only since 2026-10-10)
 
-ingest() { AGENT_USAGE_TRACKER_RUNTIME="$RT" python3 "$SRC_DIR/ingest_session_usage.py" --agent "$AGENT" "$@" 2>/dev/null; }
+ingest() { AGENT_TRACKER_HOME="$RT" python3 "$SRC_DIR/ingest_session_usage.py" --agent "$AGENT" "$@" 2>/dev/null; }
 q() {
     python3 -c 'import sqlite3, sys
 for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]):
     print("\t".join("" if v is None else str(v) for v in r))' "$SDB" "$1"
 }
-py() { AGENT_USAGE_TRACKER_RUNTIME="$RT" python3 -c "import sys; sys.path.insert(0, '$SRC_DIR'); import usage_db, ingest_session_usage as g
+py() { AGENT_TRACKER_HOME="$RT" python3 -c "import sys; sys.path.insert(0, '$SRC_DIR'); import usage_db, ingest_session_usage as g
 db = usage_db.open_sessions('$AGENT')
 $1"; }
 

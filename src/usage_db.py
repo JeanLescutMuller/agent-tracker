@@ -27,9 +27,12 @@ import sqlite3
 import time
 from pathlib import Path
 
-# The runtime tree (~/opt/agent-usage-tracker). Overridable for tests and for
-# hand-run steps on another tree.
-RUNTIME_DIR = Path(os.environ.get("AGENT_USAGE_TRACKER_RUNTIME") or Path.home() / "opt" / "agent-usage-tracker")
+# The runtime tree (~/opt/agent-tracker; ~/opt/agent-usage-tracker before the
+# rename, doc/deploy_migration.md). Overridable for tests and for hand-run
+# steps on another tree: AGENT_TRACKER_HOME (the contract's name), or the old
+# AGENT_USAGE_TRACKER_RUNTIME, still honoured.
+RUNTIME_DIR = Path(os.environ.get("AGENT_TRACKER_HOME") or os.environ.get("AGENT_USAGE_TRACKER_RUNTIME")
+                   or Path.home() / "opt" / "agent-tracker")
 AGENTS = ("claude", "codex")
 
 # Bumped when a schema change needs a migration; 0 means "not created yet".

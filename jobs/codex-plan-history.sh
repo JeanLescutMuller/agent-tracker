@@ -1,5 +1,5 @@
 #!/bin/bash
-# ~/opt/agent-usage-tracker/codex-plan-history.sh: job agent-usage-tracker.codex-plan-history.
+# ~/opt/agent-tracker/codex-plan-history.sh: job agent-tracker.codex-plan-history.
 # Requirements:
 #   - Codex's plan_limit_history (ChatGPT backend); Mac only; hourly tick
 #   - once per 24 h after a success; 1 h after a failure

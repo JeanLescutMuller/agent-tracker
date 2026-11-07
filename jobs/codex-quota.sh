@@ -1,5 +1,5 @@
 #!/bin/bash
-# ~/opt/agent-usage-tracker/codex-quota.sh: job agent-usage-tracker.codex-quota.
+# ~/opt/agent-tracker/codex-quota.sh: job agent-tracker.codex-quota.
 # Requirements:
 #   - one reading of the Codex account's quota (codex app-server); Mac only (no Codex on the VM); tick every 60 s
 #   - the poller keeps its own rules: skip while a Codex session file is fresher than 5 min; poll every tick while a

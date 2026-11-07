@@ -1,8 +1,8 @@
-# Rendered by install.sh (__RUNTIME__, __JOB__) into ~/opt/agent-usage-tracker/com.jeanlescut.agent-usage-tracker.__JOB__.service;
+# Rendered by install.sh (__RUNTIME__, __JOB__) into ~/opt/agent-tracker/com.jeanlescut.agent-tracker.__JOB__.service;
 # ~/.config/systemd/user/ holds a symlink to it. The trigger of one job: runs its job-runner entrypoint, which decides,
 # works and records each check (logs and statuses under ~/opt/job-runner/). Linux counterpart of ../launchd/job.plist.template.
 [Unit]
-Description=agent-usage-tracker: __JOB__ (its job-runner entrypoint)
+Description=agent-tracker: __JOB__ (its job-runner entrypoint)
 
 [Service]
 Type=oneshot

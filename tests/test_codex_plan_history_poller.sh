@@ -28,7 +28,7 @@ age() { SHIFT=$((SHIFT + $1)); }
 
 # run_poller <python expression raised or returned by the fake urlopen>
 run_poller() {
-    HOME="$TH_TMP2/home" AGENT_USAGE_TRACKER_RUNTIME="$RT" python3 -c "
+    HOME="$TH_TMP2/home" AGENT_TRACKER_HOME="$RT" python3 -c "
 import sys, io, json, http.client, urllib.error, urllib.request
 sys.path.insert(0, '$REPO_ROOT/src')
 import time

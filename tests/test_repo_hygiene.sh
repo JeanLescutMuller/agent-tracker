@@ -3,8 +3,8 @@
 # shellcheck passes where available, only the two gates write to a database,
 # and the boundary with agent-statusline
 # documented in doc/design.md §7.1 holds - this
-# repo never sources or runs anything from it, and reads exactly one thing
-# from its runtime tree: the heartbeat files.
+# repo never sources, runs or reads anything of it (since 2026-11 not even its
+# heartbeat files: the quota jobs read agent-tracker's own last_seen.json).
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 
@@ -33,13 +33,12 @@ else
     section "  (skipped: shellcheck not installed)"
 fi
 
-section "boundary with agent-statusline: only its heartbeat files are read"
-# Code (not docs) that names agent-statusline's runtime tree must only be
-# reaching for state/heartbeat/. Comment lines are ignored.
-other_refs="$(grep -rn 'opt.*agent-statusline\|"agent-statusline"' "$REPO_ROOT/src" "$REPO_ROOT/bin" \
+section "boundary with agent-statusline: nothing of it is read"
+# Code (not docs) never names agent-statusline's runtime tree. Comment lines are ignored.
+other_refs="$(grep -rn 'opt.*agent-statusline\|"agent-statusline"\|heartbeat/' "$REPO_ROOT/src" "$REPO_ROOT/jobs" \
     --include='*.py' --include='*.sh' 2>/dev/null \
-    | grep -v -e '^[^:]*:[0-9]*: *#' -e 'heartbeat' || true)"
-assert_eq "no code path into agent-statusline other than state/heartbeat/" "" "$other_refs"
+    | grep -v -e '^[^:]*:[0-9]*: *#' || true)"
+assert_eq "no code path into agent-statusline (no heartbeat either)" "" "$other_refs"
 sources_statusline="$(grep -rln 'src/statusline/\|providers/' "$REPO_ROOT/src" "$REPO_ROOT/bin" "$REPO_ROOT/install.sh" "$REPO_ROOT/uninstall.sh" 2>/dev/null || true)"
 assert_eq "nothing references agent-statusline's source tree" "" "$sources_statusline"
 
@@ -52,11 +51,12 @@ writes="$(grep -nE '"(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER) ' "$REPO_R
     | grep -v -e '/src/usage_db.py:' -e '/src/ingest_account_quota.py:' -e '/src/ingest_session_usage.py:' -e '/src/ingest_aggregates.py:' \
     -e '/src/transcript_reader.py:.*INTO requests ' -e '/src/transcript_reader.py:.*INTO scans ' -e '/src/transcript_reader.py:.* offsets' || true)"
 assert_eq "no data-changing SQL outside the gates" "" "$writes"
-appends="$(grep -nE 'O_APPEND|open\([^)]*"a"' "$REPO_ROOT"/src/*.py "$REPO_ROOT"/bin/* 2>/dev/null || true)"
-assert_eq "no collector appends to a data file" "" "$appends"
+# agent_tracker.py is the one writer of data/sessions/*/lifecycle.jsonl (one O_APPEND write per line) and of its logs.
+appends="$(grep -nE 'O_APPEND|open\([^)]*"a"' "$REPO_ROOT"/src/*.py "$REPO_ROOT"/bin/* 2>/dev/null | grep -v '/src/agent_tracker.py:' || true)"
+assert_eq "no collector appends to a data file (agent_tracker.py's lifecycle.jsonl aside)" "" "$appends"
 gate_calls="$(grep -lE 'ingest_account_quota\.add_row|ingest_session_usage\.add_|ingest_aggregates\.add_' "$REPO_ROOT"/src/*.py | xargs -n1 basename | sort | paste -sd ' ' -)"
 assert_eq "the collectors that hand rows to a gate" \
-    "aggregate_slots.py claude_quota_api_poller.py codex_plan_history_poller.py codex_quota_api_poller.py receive_from_machine.py statusline_payload_reader.py telemetry_receiver.py transcript_reader.py" \
+    "aggregate_slots.py claude_quota_api_poller.py codex_plan_history_poller.py codex_quota_api_poller.py receive_from_machine.py statusline_usage.py telemetry_receiver.py transcript_reader.py" \
     "$gate_calls"
 
 harness_summary

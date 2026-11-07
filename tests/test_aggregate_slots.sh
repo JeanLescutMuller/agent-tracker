@@ -11,7 +11,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-slots.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 RT="$TMP/rt"
 ADB="$RT/data/claude/aggregates/m1.db"
-export AGENT_USAGE_TRACKER_RUNTIME="$RT" JR_MACHINE_NAME=m1
+export AGENT_TRACKER_HOME="$RT" JR_MACHINE_NAME=m1
 S1=11111111-1111-1111-1111-111111111111 S2=22222222-2222-2222-2222-222222222222 SX=99999999-9999-9999-9999-999999999999
 
 py() { python3 -c "import sys; sys.path.insert(0, '$REPO_ROOT/src'); import usage_db, ingest_session_usage as s, ingest_aggregates as g, aggregate_slots as a; $1"; }
@@ -78,10 +78,10 @@ mkdir -p "$E2E/projects/-Users-x-dev-app"
 } > "$E2E/projects/-Users-x-dev-app/s1.jsonl"
 mkdir -p "$E2E/projects/-Users-x-dev-app2" && head -2 "$E2E/projects/-Users-x-dev-app/s1.jsonl" > "$E2E/projects/-Users-x-dev-app2/resumed.jsonl"
 e2e() {   # e2e <epoch>: one aggregates run at that time, on the fixture transcripts
-    AGENT_USAGE_TRACKER_RUNTIME="$E2E/rt" AGENT_USAGE_TRACKER_TRANSCRIPTS="$E2E/projects" AGENT_USAGE_TRACKER_CODEX_SESSIONS="$E2E/none" \
+    AGENT_TRACKER_HOME="$E2E/rt" AGENT_USAGE_TRACKER_TRANSCRIPTS="$E2E/projects" AGENT_USAGE_TRACKER_CODEX_SESSIONS="$E2E/none" \
         python3 -c "import sys, time; sys.path.insert(0, '$REPO_ROOT/src'); time.time = lambda: $1; import aggregate_slots as a; a.main()"
 }
-AGENT_USAGE_TRACKER_RUNTIME="$E2E/rt" python3 -c "
+AGENT_TRACKER_HOME="$E2E/rt" python3 -c "
 import sys; sys.path.insert(0, '$REPO_ROOT/src'); import usage_db, ingest_session_usage as s
 s.add_telemetry(usage_db.open_sessions('claude'), {'source': 'claude_otel', 'observed_at': 1791460805, 'received_at': 1791460806, 'event': 'api_request',
     'attributes': {'session.id': '$S1', 'request_id': 'req_a', 'model': 'claude-opus-5-5', 'cost_usd': 0.0123}})"

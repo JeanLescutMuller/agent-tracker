@@ -8,7 +8,7 @@
          and statuses under ~/opt/job-runner/). launchd fires once on wake
          when a tick was missed during sleep. -->
     <key>Label</key>
-    <string>com.jeanlescut.agent-usage-tracker.__JOB__</string>
+    <string>com.jeanlescut.agent-tracker.__JOB__</string>
 
     <key>ProgramArguments</key>
     <array>

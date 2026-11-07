@@ -2,12 +2,12 @@
 """Adds or removes this project's telemetry variables in the `env` object of
 ~/.claude/settings.json, touching nothing else.
 
-agent-usage-tracker owns only the keys listed in claude_telemetry_env.json;
+agent-tracker owns only the keys listed in claude_telemetry_env.json;
 other `env` keys and every other top-level key belong to other tools (see
 the claude-config-ownership skill) and are left exactly as they are.
 
 Usage: merge_claude_env.py set|unset
-Env:   CLAUDE_SETTINGS (default ~/.claude/settings.json)
+Env:   CLAUDE_SETTINGS (default $CLAUDE_CONFIG_DIR/settings.json, else ~/.claude/settings.json)
 Prints one of: changed, unchanged, absent.
 """
 import json
@@ -15,7 +15,8 @@ import os
 import sys
 from pathlib import Path
 
-settings_path = Path(os.environ.get("CLAUDE_SETTINGS", Path.home() / ".claude" / "settings.json"))
+settings_path = Path(os.environ.get("CLAUDE_SETTINGS") or
+                     Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "settings.json")
 d_owned = json.loads((Path(__file__).resolve().parent / "claude_telemetry_env.json").read_text())
 mode = sys.argv[1]
 
