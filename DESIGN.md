@@ -64,7 +64,7 @@ The same fact kept in several places (the overlap the user asked to remove):
 | hook Stop | Claude finishes its turn | event `stop` | ≈ same as prompts |
 | hook Notification (idle, permission) | Claude waits for the user | event `waiting` | a few per hour [assumed] |
 | hook SessionEnd | `/exit`, Ctrl-D, closed terminal | event `end` | ≤ 1; **never on a crash** |
-| statusline tick | every 10 s, and on each message | `agent-tracker seen` rewrites `last_seen.json` | ≤ 6 per minute, measured gaps 0.8–10.1 s |
+| statusline tick | every 10 s, and on each message | `agent-tracker tick` (chained before the display) rewrites `last_seen.json` | ≤ 6 per minute, measured gaps 0.8–10.1 s |
 
 Codex: the same events through its plugin hooks (asm and notify already use them: `src/codex-plugin/hooks/hooks.json`, `release/codex/hooks/hooks.json`) and the patched Codex statusline.
 
@@ -85,10 +85,10 @@ Codex: the same events through its plugin hooks (asm and notify already use them
 
 ```text
 ~/opt/agent-tracker/data/<uuid>/
-  last_seen.json   written by `agent-tracker seen`, called by the statusline every 10 s; rewritten whole (temp file + rename)
+  last_seen.json   written by `agent-tracker tick`, chained before the statusline by my-setup, every 10 s; rewritten whole (temp file + rename)
                    {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","boot_ts":1794046382,"pid":4607,"pid_start":1794047610,
                     "tmux_session":"jeanlescut","window_id":"@0","pane_id":"%0","pane":"jeanlescut:0.0",
-                    "cwd":"/Users/jeanlescut","model":"claude-opus-5-5","remote_control":true}
+                    "cwd":"/Users/jeanlescut"}
   activity.jsonl   written by agent-tracker's hook script; append-only, one line per event, each < 512 bytes
                    {"ts":1794047617,"dt":"2026-11-07T10:33:37Z","event":"start","source":"startup","agent":"claude",
                     "machine":"chan-lescut-macbook-pro","boot_ts":1794046382,"pid":4607,"pid_start":1794047610,
@@ -113,6 +113,38 @@ Codex: the same events through its plugin hooks (asm and notify already use them
 | a reader during a write · a power cut mid-write | — | a line of `activity.jsonl` without its final newline is ignored; `last_seen.json` is never half-written |
 
 Today's shared heartbeat file (one per agent, written by every Claude session) is the only real collision: last writer wins, so it cannot say which Claude session is open. `last_seen.json` replaces it; the per-agent time is the newest `ts` among them.
+
+## 3b. Copy only with a reason; how readers look things up; who owns the statusline call
+
+**Copy rule:** while a Claude session runs, read Claude Code's own `~/.claude/sessions/<pid>.json` (pid, UUID, cwd, tmux pane, status, updatedAt, name, bridgeSessionId). agent-tracker copies a fact only if a crash loses it or Claude Code never keeps it. [verified 2026-11-07 12:48: the 28 files there were all created after 11:31; none from before the 11:12 crash survived.]
+
+| Fact | Claude Code's file | After a crash | agent-tracker keeps it? |
+|---|---|---|---|
+| UUID, pid, cwd, tmux pane | yes | gone | yes, `last_seen.json` (the crash restore needs them) |
+| status, updatedAt, name, Remote Control | yes | gone | no: read live |
+| last prompt; start / end / resume history; boot | no | — | yes, `activity.jsonl` |
+| last seen | updatedAt only on busy↔idle | gone | yes, `last_seen.json` ts |
+| anything Codex | no such file | — | yes |
+
+**Lookups:** every hook and the statusline receive the UUID from Claude Code on stdin, so most readers open `data/<uuid>/` directly. Readers that start from a tmux pane (cc-map, cc-rc, terminal_snapshot) use `agent-tracker now --pane <%id>`, which reads the `last_seen.json` of the current boot's folders (~30) [assumed cheap; measure in step 2]. No index file by pane or PID is kept: it would be a second copy to keep in sync.
+
+| Reader | Starts from | Today | New |
+|---|---|---|---|
+| asm resume | text, folder or UUID | scans `indexes/*.json` | same for text; state and last prompt from `data/<uuid>/` |
+| asm close | a picked Claude session | `~/.claude/sessions/*.json` → pid | unchanged (live) |
+| asm duplicate check | UUID | `lifecycles/<uuid>.jsonl` | `data/<uuid>/activity.jsonl` |
+| notify hooks | shell PID | `/tmp/agent-notify-$USER/<shell_pid>/` | UUID from hook stdin → `data/<uuid>/last_seen.json` |
+| cc-map, cc-rc | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | unchanged for live data; `now --pane` for last prompt |
+| terminal_snapshot | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | `agent-tracker now` / `open-at-crash` |
+| usage quota job | agent type | `heartbeat/claude` age | newest `ts` among `data/*/last_seen.json` |
+
+**Who owns the statusline call:** Claude Code runs one `statusLine` command; that key is owned by my-setup (`modules/claude_config.sh`, skill config-ownership) and points to agent-statusline's script. **Choice:** my-setup chains `agent-tracker tick | bash ~/.claude/statusline-command.sh` when agent-tracker is installed, the display alone otherwise. `tick` reads the JSON from stdin, writes `last_seen.json` in the background, and copies stdin to stdout unchanged. **Why:** agent-statusline holds no tracking code, so reinstalling it on a VM, or rewriting the display, cannot drop the tracking. **Rejected:** a line inside agent-statusline's script (a display rewrite can drop it silently); agent-tracker owning `statusLine` (two projects fighting over one key, last install wins).
+
+| New VM gets | Display | Tracking |
+|---|---|---|
+| my-setup + agent-statusline | yes | no, nothing breaks |
+| + agent-tracker | yes | yes: my-setup chains both |
+| agent-statusline reinstalled later | yes | yes: the chain lives in my-setup's setting |
 
 ## 4. Reading: computed at read time, never stored twice
 
@@ -149,7 +181,7 @@ Old folders: a `<uuid>/` whose newest file is older than 30 days moves to `data/
 |---|---|---|
 | asm | its SessionStart/SessionEnd hooks and `data/lifecycles/`; `session_state` and `last_active` come from the tracker | search, index of conversations, sync across machines, resume, close |
 | notify | its own bookkeeping of shell PID, agent PID, pane, Claude session, cwd (static.env) | its state machine and colors; its hooks only where a color must change at once (it may call the tracker's file instead of `ps`) |
-| statusline | the per-agent heartbeat (derived from `*/last_seen.json`) | the display; one added line: `agent-tracker seen` |
+| statusline | the per-agent heartbeat (derived from `*/last_seen.json`) | the display; no tracking code: my-setup's `statusLine` setting chains `agent-tracker tick | bash statusline-command.sh` (§3b) |
 | usage-tracker | reading the heartbeat file | everything else (tokens, quotas) |
 | my-setup | cc-map/cc-rc reading `~/.claude/sessions` and notify; one of the two crash restores (§6) | the Chrome kit (it tracks tabs, not Claude sessions) |
 

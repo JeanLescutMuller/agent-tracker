@@ -14,7 +14,7 @@
   --ntf:#2563eb; --ntf-bg:#e7efff;
   --stl:#c27c0e; --stl-bg:#fff4dc;
   --use:#d03a4a; --use-bg:#fde8ea;
-  --mys:#be185d; --mys-bg:#fce7f3;
+  --mys:#0e7490; --mys-bg:#dff4f8;
   --trk:#0f8a5f; --trk-bg:#e1f6ec;
   --ok:#0f8a5f; --bad:#d03a4a; --warn:#c27c0e;
   --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
@@ -24,12 +24,12 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#11131c; --panel:#1a1d29; --ink:#e8eaf3; --muted:#9aa1b8; --line:#2c3142;
   --asm:#b393ff; --asm-bg:#2a1f47; --cc:#a8b3c7; --cc-bg:#252b38; --ntf:#7aa7ff; --ntf-bg:#1b2747;
-  --stl:#f0b44c; --stl-bg:#3a2c12; --use:#ff7d8a; --use-bg:#41191f; --mys:#f472b6; --mys-bg:#3d1630;
+  --stl:#f0b44c; --stl-bg:#3a2c12; --use:#ff7d8a; --use-bg:#41191f; --mys:#5ed3ea; --mys-bg:#0f3540;
   --trk:#4fd39d; --trk-bg:#123628; --ok:#4fd39d; --bad:#ff7d8a; --warn:#f0b44c; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#11131c; --panel:#1a1d29; --ink:#e8eaf3; --muted:#9aa1b8; --line:#2c3142;
   --asm:#b393ff; --asm-bg:#2a1f47; --cc:#a8b3c7; --cc-bg:#252b38; --ntf:#7aa7ff; --ntf-bg:#1b2747;
-  --stl:#f0b44c; --stl-bg:#3a2c12; --use:#ff7d8a; --use-bg:#41191f; --mys:#f472b6; --mys-bg:#3d1630;
+  --stl:#f0b44c; --stl-bg:#3a2c12; --use:#ff7d8a; --use-bg:#41191f; --mys:#5ed3ea; --mys-bg:#0f3540;
   --trk:#4fd39d; --trk-bg:#123628; --ok:#4fd39d; --bad:#ff7d8a; --warn:#f0b44c; color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
@@ -149,7 +149,7 @@ footer{color:var(--muted);font-size:13px}
  "status": "busy", "updatedAt": 1794049…,
  "bridgeSessionId": "…"}</pre><div class="note">one per running Claude session · <b class="no">gone after a crash</b></div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-asm"><b>asm close</b> <span class="when">by hand</span><br>pid, status, tmux</div><div class="rd c-mys"><b>cc-map, cc-rc</b> <span class="when">by hand</span><br>status, updatedAt, bridgeSessionId (= Remote Control on)</div><div class="rd c-mys"><b>terminal_snapshot</b> <span class="when">by hand</span><br>pid → sessionId, cwd</div></div>
+      <div class="r"><div class="rd c-asm"><b>asm close</b> <span class="when">by hand</span><br>pid, status, tmux</div><div class="rd c-mys"><b>cc-map, cc-rc</b> (my-setup: map of every tmux pane and its Claude session; turn /rc on) <span class="when">by hand</span><br>status, updatedAt, bridgeSessionId (= Remote Control on)</div><div class="rd c-mys"><b>terminal_snapshot</b> <span class="when">by hand</span><br>pid → sessionId, cwd</div></div>
     </div>
     <div class="row">
       <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">transcript</div><div><span class="trig">✉ each message</span></div></div>
@@ -260,7 +260,7 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/opt/my-setup/state/tmux/resurrect/last</div><pre>pane  jeanlescut  0  …  :/Users/jeanlescut  2.1.319  :claude</pre><div class="note">tmux only · <b class="no">"claude" without the UUID</b> → comes back as an empty shell</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-mys"><b>prefix + Ctrl-r</b> <span class="when">after a crash</span><br>sessions, windows, panes, folders</div></div>
+      <div class="r"><div class="rd c-mys"><b>Ctrl-b, then Ctrl-r</b> (tmux prefix, then resurrect's restore) <span class="when">after a crash</span><br>sessions, windows, panes, folders</div></div>
     </div>
   </div>
 
@@ -295,12 +295,12 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
       <div class="r"><div class="rd c-asm"><b>asm resume</b> <span class="when">by hand</span><br>last event (open / ended), last <code>prompt</code> ts, cwd</div><div class="rd c-ntf"><b>notify</b> <span class="when">at each of its events</span><br>pane_id + last event → color</div><div class="rd c-mys"><b>cc-map, cc-rc</b> <span class="when">by hand</span><br><code>agent-tracker now</code></div><div class="rd c-mys"><b>crash restore</b> <span class="when">once, after a crash</span><br><code>agent-tracker open-at-crash</code></div></div>
     </div>
     <div class="row">
-      <div class="w c-stl bg-stl"><div class="who">statusline</div><div class="stream">last seen (+1 line: <code>agent-tracker seen</code>)</div><div><span class="trig">⏲ every 10 s + each message</span></div><div class="note">the statusline already gets the UUID, folder and model from Claude Code, and runs inside the pane ($TMUX_PANE)</div></div>
+      <div class="w c-stl bg-stl"><div class="who">statusline</div><div class="stream">last seen: <code>agent-tracker tick</code>, chained before the display by my-setup</div><div><span class="trig">⏲ every 10 s + each message</span></div><div class="note">gets the UUID and folder from Claude Code on stdin, runs inside the pane ($TMUX_PANE) · agent-statusline itself contains no tracking</div></div>
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/opt/agent-tracker/data/&lt;uuid&gt;/last_seen.json</div><pre>{"ts":1794051573,"dt":"2026-11-07T11:39:33Z","boot_ts":1794046382,
  "pid":4607,"pid_start":1794047610,"tmux_session":"jeanlescut",
  "window_id":"@0","pane_id":"%0","pane":"jeanlescut:0.0",
- "cwd":"/Users/jeanlescut","model":"claude-opus-5-5","remote_control":true}</pre><div class="note">rewritten whole each tick (temp file + rename: a reader never sees half a file) · <b class="good">after a crash: where every Claude session was, ≤ 10 s before</b></div></div>
+ "cwd":"/Users/jeanlescut"}</pre><div class="note">rewritten whole each tick (temp file + rename: a reader never sees half a file) · <b class="good">after a crash: where every Claude session was, ≤ 10 s before</b></div></div>
       <div class="arrow">→</div>
       <div class="r"><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">every 60 s</span><br>newest <code>ts</code> &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>now, open-at-crash</b> <span class="when">when asked</span><br>pane, cwd, last seen of each Claude session</div></div>
     </div>
@@ -377,7 +377,7 @@ minus session_state, last_active  → read from agent-tracker</pre></div>
   <table>
     <thead><tr><th>File</th><th>Written by</th><th>When</th><th>Holds</th></tr></thead>
     <tbody>
-      <tr><td><code>last_seen.json</code></td><td><code>agent-tracker seen</code>, called by the statusline</td><td>every 10 s + each message</td><td>one JSON object, rewritten whole (temp + rename): where the Claude session is and when it was last drawn</td></tr>
+      <tr><td><code>last_seen.json</code></td><td><code>agent-tracker tick</code>, chained before the statusline by my-setup</td><td>every 10 s + each message</td><td>one JSON object, rewritten whole (temp + rename): where the Claude session is and when it was last drawn</td></tr>
       <tr><td><code>activity.jsonl</code></td><td><code>agent-tracker</code>'s hook script</td><td>each event below</td><td>what really happened: one JSON line per event, appended, never rewritten, each &lt; 512 bytes</td></tr>
       <tr><td><code>usage.jsonl</code> <span class="meh">(open)</span></td><td>agent-usage-tracker</td><td>each API request (OTel)</td><td>cost and quota data the transcript doesn't have</td></tr>
     </tbody>
@@ -436,7 +436,7 @@ minus session_state, last_active  → read from agent-tracker</pre></div>
       <tr><td class="proj">cc-map, cc-rc</td><td>when typed</td><td><code>agent-tracker now --json</code></td><td>the map of panes and Claude sessions; where to turn /rc on</td></tr>
       <tr><td class="proj">terminal_snapshot</td><td>on each start / end event</td><td><code>agent-tracker now --json</code></td><td>which <code>claude --resume</code> goes in which pane</td></tr>
       <tr><td class="proj">you, after a crash</td><td>once</td><td><code>agent-tracker open-at-crash</code> (or the restore script)</td><td>what was open when the Mac died</td></tr>
-      <tr><td class="proj">statusline</td><td>—</td><td>nothing</td><td>it only writes <code>last_seen.json</code></td></tr>
+      <tr><td class="proj">statusline</td><td>—</td><td>nothing</td><td>it only draws; <code>agent-tracker tick</code> before it writes <code>last_seen.json</code></td></tr>
     </tbody>
   </table>
   </div>
@@ -450,6 +450,71 @@ agent-tracker open-at-crash:  prev_boot = the boot_ts before the current one
 
 today's crash, asm's files:   47 "never ended", back to October
 with agent-tracker:           only the Claude sessions of the boot that ended at 11:12, one per pane</pre>
+</section>
+
+
+<!-- ========================= WHAT CLAUDE CODE ALREADY KEEPS ========================= -->
+<section>
+  <div class="eyebrow">Copy only with a reason</div>
+  <h2>What Claude Code already keeps, and the few things we copy</h2>
+  <p class="lede">Rule: while a Claude session runs, read Claude Code's own <code>~/.claude/sessions/&lt;pid&gt;.json</code>. Copy a fact only if a crash loses it or Claude Code never keeps it. Verified 2026-11-07 12:48: the 28 files there were all created after 11:31, so <b>every file from before the 11:12 crash was gone</b>.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Fact</th><th>Claude Code's file</th><th>After a crash</th><th>agent-tracker keeps it?</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>UUID, pid, folder, tmux pane</td><td class="good">yes</td><td class="no">gone</td><td class="good">yes, in <code>last_seen.json</code></td><td>the crash restore needs them</td></tr>
+      <tr><td>busy / idle (<code>status</code>), <code>updatedAt</code>, name, Remote Control</td><td class="good">yes</td><td class="no">gone</td><td class="no">no</td><td>only useful while it runs: read it live</td></tr>
+      <tr><td>last prompt (time, excerpt)</td><td class="no">no</td><td>—</td><td class="good">yes, <code>activity.jsonl</code></td><td>nobody keeps it</td></tr>
+      <tr><td>start, end, resume history; boot</td><td class="no">no</td><td>—</td><td class="good">yes, <code>activity.jsonl</code></td><td>to tell "open at crash" from "ended"</td></tr>
+      <tr><td>last seen</td><td class="meh">updatedAt only on busy↔idle</td><td class="no">gone</td><td class="good">yes, <code>last_seen.json</code> ts</td><td>every 10 s, survives</td></tr>
+      <tr><td>anything Codex</td><td class="no">no such file</td><td>—</td><td class="good">yes</td><td>Codex has no live file</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= LOOKUPS ========================= -->
+<section>
+  <div class="eyebrow">Lookups</div>
+  <h2>How each reader finds its data: by which key</h2>
+  <p class="lede">Every hook and the statusline already get the Claude session's <b>UUID</b> from Claude Code (stdin). So most readers open <code>data/&lt;uuid&gt;/</code> directly; only readers that start from a <b>tmux pane</b> must look through the folders of the current boot (~30, cheap).</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Reader</th><th>Starts from</th><th>Today: how it finds the data</th><th>New: how it finds the data</th></tr></thead>
+    <tbody>
+      <tr><td class="proj">asm resume</td><td>text, folder or UUID</td><td>scans every <code>indexes/*.json</code></td><td>same scan for text; state and last prompt from <code>data/&lt;uuid&gt;/</code></td></tr>
+      <tr><td class="proj">asm close</td><td>a picked Claude session</td><td>scans <code>~/.claude/sessions/*.json</code> → pid</td><td>unchanged (live data: Claude Code's file)</td></tr>
+      <tr><td class="proj">asm duplicate check</td><td>UUID (hook stdin)</td><td><code>lifecycles/&lt;uuid&gt;.jsonl</code> → old pids</td><td><code>data/&lt;uuid&gt;/activity.jsonl</code> → old pids</td></tr>
+      <tr><td class="proj">notify hooks</td><td><b>shell PID</b> (process tree)</td><td><code>/tmp/agent-notify-$USER/&lt;shell_pid&gt;/</code></td><td><b>UUID</b> (hook stdin) → <code>data/&lt;uuid&gt;/last_seen.json</code> for the pane</td></tr>
+      <tr><td class="proj">cc-map, cc-rc</td><td><b>tmux pane</b></td><td>pane → pane_pid → child pid → <code>~/.claude/sessions/&lt;pid&gt;.json</code>; shell pid → notify's /tmp</td><td>unchanged for live data; <code>agent-tracker now --pane %0</code> for last prompt</td></tr>
+      <tr><td class="proj">terminal_snapshot</td><td><b>tmux pane</b></td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td><code>agent-tracker now</code> (live) or <code>open-at-crash</code></td></tr>
+      <tr><td class="proj">statusline</td><td>UUID (stdin)</td><td>writes <code>heartbeat/claude</code> (no key)</td><td>writes nothing; <code>agent-tracker tick</code> before it writes <code>data/&lt;uuid&gt;/last_seen.json</code></td></tr>
+      <tr><td class="proj">usage quota job</td><td>agent type</td><td><code>heartbeat/claude</code> age</td><td>newest <code>ts</code> among <code>data/*/last_seen.json</code></td></tr>
+      <tr><td class="proj">usage payload</td><td>UUID (stdin)</td><td>SQLite, column session_id</td><td>unchanged (scope open)</td></tr>
+      <tr><td class="proj">Chrome kit hook</td><td>UUID + subagent id</td><td><code>state/chrome/sessions/&lt;key&gt;.json</code></td><td>unchanged</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= STATUSLINE OWNERSHIP ========================= -->
+<section>
+  <div class="eyebrow">Who owns the statusline call</div>
+  <h2>Installing the statusline on a new VM must not drop the tracking</h2>
+  <p class="lede">Claude Code runs <b>one</b> <code>statusLine</code> command. That setting is owned by <b>my-setup</b> (<code>modules/claude_config.sh</code>, skill config-ownership), and it points to agent-statusline's script. So the tracking call should not live inside agent-statusline's display code.</p>
+  <div class="cards">
+    <div class="opt win"><b>Chained by my-setup (proposed)</b><span><code>statusLine = agent-tracker tick | bash statusline-command.sh</code>. <code>tick</code> reads Claude Code's JSON from stdin, writes <code>last_seen.json</code> in the background, and passes the same JSON on to the display. agent-statusline holds no tracking code, so a reinstall or a new display can't remove it. Without agent-tracker installed, my-setup writes the display alone.</span></div>
+    <div class="opt lose"><b>One line inside agent-statusline's script</b><span>works, but a rewrite of the display can silently drop it. Installing the statusline on a VM then decides whether tracking happens.</span></div>
+    <div class="opt lose"><b>agent-tracker takes over the statusLine setting</b><span>two projects would fight over one key: whoever installs last wins.</span></div>
+  </div>
+  <table class="tablewrap" style="display:table">
+    <thead><tr><th>New VM, what gets installed</th><th>Display</th><th>Tracking</th></tr></thead>
+    <tbody>
+      <tr><td>my-setup + agent-statusline</td><td class="good">yes</td><td class="meh">no (no agent-tracker), nothing breaks</td></tr>
+      <tr><td>my-setup + agent-statusline + agent-tracker</td><td class="good">yes</td><td class="good">yes: my-setup sees both and chains them</td></tr>
+      <tr><td>agent-statusline reinstalled later</td><td class="good">yes</td><td class="good">yes: the chain is in my-setup's setting, not in its script</td></tr>
+    </tbody>
+  </table>
 </section>
 
 <!-- ========================= SCOPE ========================= -->
