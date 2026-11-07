@@ -1,4 +1,10 @@
-# Deploy — agent-tracker v1 (not done; for the user's review)
+# Deploy — agent-tracker v1 (deployed 2026-11-07)
+
+**Status (2026-11-07, 17:10 CET):** deployed on the Mac and the VM, in the order below, by claude-code (session cbf1952e). Repos renamed on GitHub and in `~/dev` (agent-usage-tracker → agent-tracker, agent-session-manager → agent-resume); the design repo folded into `design/` (history kept). Commits not pushed.
+
+**Incident, 15:30 CET:** a test agent killed the user's real tmux server (`TMUX_TMPDIR=$d tmux kill-server` with `TMUX` set: tmux ignores TMUX_TMPDIR). It revealed: `tick` overwrote the pane fields with nulls once tmux was gone (fixed: kept, `tests/test_tick_tmux_gone.sh`); `ares tmux` handled a reboot only (added `--this-boot`); the iTerm2 tabs failed in zsh (`=name`, fixed: quoted). The user restored with `ares tmux --this-boot`. Rule since: tests run tmux only through `tests/tmux_guard.sh`. Later fixes: last prompt in long transcripts, `check` skips SDK processes, agent-auto-close skips non-typed entries, three restore bugs (6+ panes, reboot after a tmux death, resumed-then-exited). Open items: Todoist, subsections agent-tracker and agent-resume.
+
+The plan as it was written before the deploy:
 
 Everything is built and tested on branch `agent-tracker-v1` in each repo (agent-auto-close: its new repo's `main`); nothing is merged, pushed, installed or renamed. This file gives the order across repos; each repo's own deploy note has the exact commands. Built and tested 2026-11-07; see "Status" in [`IMPLEMENTATION.md`](IMPLEMENTATION.md).
 

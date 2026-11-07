@@ -86,7 +86,7 @@ A reader ignores a line of `lifecycle.jsonl` without its final newline. Fixture 
 - One or more commits on `agent-tracker-v1` (agent-auto-close: `main`), never pushed.
 - A report to the coordinator, ≤ 300 words: what changed (files), test results (numbers), what was left out and why, anything the deploy step must do (migrations, renames).
 
-## 7. Status (2026-11-07): built and tested, not deployed
+## 7. Status: deployed 2026-11-07 (see DEPLOY.md, incl. the 15:30 incident and the fixes since; the table below is the pre-deploy build)
 
 | Repo | Branch tip | Its own tests (sandbox) | Notes |
 |---|---|---|---|
