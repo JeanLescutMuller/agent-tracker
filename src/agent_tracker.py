@@ -263,6 +263,16 @@ def agent_pid(agent: str) -> tuple[int | None, int | None]:
     return None, None
 
 
+def is_codex_daemon(pid) -> bool:
+    """Whether pid is Codex's shared background process (`codex app-server`,
+    the parent of every Codex hook since Codex 0.167: verified 2026-11-07).
+    One serves every Codex window and keeps the $TMUX_PANE of the pane the
+    first one was opened in, so its pid and pane say nothing about the
+    session a hook is for; that window's own status line does (tick)."""
+    l_argv = proc_argv(pid) if isinstance(pid, int) else None
+    return bool(l_argv) and len(l_argv) > 1 and l_argv[1] == "app-server"
+
+
 # ---------------------------------------------------------------- tmux
 
 def tmux(*l_args: str) -> str | None:
@@ -431,8 +441,8 @@ def write_last_seen(d_payload: dict, agent: str) -> bool:
     """data/sessions/<uuid>/last_seen.json from one statusline payload;
     returns whether it was rewritten (only if a field other than ts/dt
     changed, or the file's ts is REWRITE_AFTER_S old)."""
-    uuid = d_payload.get("session_id")
-    if not isinstance(uuid, str) or not UUID_RE.fullmatch(uuid):
+    uuid = d_payload.get("session_id") or (d_payload.get("thread_id") if agent == "codex" else None)
+    if not isinstance(uuid, str) or not UUID_RE.fullmatch(uuid):   # Codex's status line names it thread_id (= its hooks' session_id)
         return False
     now = int(time.time())
     pid, pid_start = agent_pid(agent)
@@ -468,11 +478,14 @@ def append_lifecycle(event: str, d_hook: dict, agent: str) -> bool:
         return False
     now = int(time.time())
     pid, pid_start = agent_pid(agent)
+    via_daemon = agent == "codex" and is_codex_daemon(pid)
+    if via_daemon:       # not this session's window: no pid, no pane (its status line writes them in last_seen.json)
+        pid = pid_start = None
     if agent == "claude" and pid is not None and \
             not is_conversation(read_json(CLAUDE_DIR / "sessions" / f"{pid}.json"), pid):
         return False     # claude -p or an SDK process: no folder (design/IMPLEMENTATION.md §5)
     if event == "start":
-        pane_id = os.environ.get("TMUX_PANE") or None
+        pane_id = None if via_daemon else os.environ.get("TMUX_PANE") or None
         pane = (tmux("display", "-p", "-t", pane_id, "#{session_name}:#{window_index}.#{pane_index}") or "").strip() \
             if pane_id else ""
         d_line = {"ts": now, "dt": iso(now), "event": "start", "source": d_hook.get("source") or "startup",
@@ -566,23 +579,27 @@ def open_sessions() -> list:
         d_start = l_events[-1]
         if current_boot is None or d_start.get("boot_ts") is None or abs(int(d_start["boot_ts"]) - current_boot) > 2:
             continue
-        if not alive(d_start.get("pid"), d_start.get("pid_start")):
-            continue
         d_seen = read_json(folder / "last_seen.json") or {}
-        if d_seen.get("pid") != d_start.get("pid"):     # written by an older process of this UUID
+        pid, pid_start = d_start.get("pid"), d_start.get("pid_start")
+        if pid is None and d_start.get("agent") == "codex" and isinstance(d_seen.get("ts"), int) \
+                and d_seen["ts"] >= int(d_start.get("ts") or 0):
+            pid, pid_start = d_seen.get("pid"), d_seen.get("pid_start")   # started through Codex's background process
+        elif d_seen.get("pid") != pid:     # written by an older process of this UUID
             d_seen = {}
+        if not alive(pid, pid_start):
+            continue
         pane_id = d_seen.get("pane_id") or d_start.get("pane_id")
         if pane_id and d_panes is None:
             d_panes = panes_now()
-        d_live = read_json(CLAUDE_DIR / "sessions" / f"{d_start['pid']}.json") or {}
-        if not is_conversation(d_live, d_start["pid"]):
+        d_live = read_json(CLAUDE_DIR / "sessions" / f"{pid}.json") or {}
+        if not is_conversation(d_live, pid):
             continue
         transcript = d_seen.get("transcript") or next(iter(CLAUDE_DIR.glob(f"projects/*/{entry.name}.jsonl")), None)
         d_prompt = last_prompt(transcript)
         d_where = (d_panes or {}).get(pane_id) or {}
         # The keys of `now --json`: exactly these, in this order (IMPLEMENTATION.md §5, FOR_READERS.md §4).
-        l_rows.append({"uuid": entry.name, "agent": d_start.get("agent") or "claude", "pid": d_start["pid"],
-                       "pid_start": d_start.get("pid_start"), "pane_id": pane_id, "pane": d_where.get("pane"),
+        l_rows.append({"uuid": entry.name, "agent": d_start.get("agent") or "claude", "pid": pid,
+                       "pid_start": pid_start, "pane_id": pane_id, "pane": d_where.get("pane"),
                        "tmux_session": d_where.get("tmux_session"), "window_index": d_where.get("window_index"),
                        "pane_index": d_where.get("pane_index"),
                        "cwd": d_seen.get("cwd") or d_start.get("cwd"), "status": d_live.get("status"),

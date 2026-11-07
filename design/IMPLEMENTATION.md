@@ -52,11 +52,15 @@ $AGENT_TRACKER_HOME/data/sessions/<uuid>/last_seen.json      written by `agent-t
   tmux_* fields are null outside tmux. pid = the Claude Code process (walk up the parent chain from the tick to the first
   pid that has $CLAUDE_CONFIG_DIR/sessions/<pid>.json; else the nearest `claude`/`codex` process). pid_start = that
   process's start time (epoch s). Rewritten only if any field other than ts/dt changed, or ts is ≥ 60 s old.
+  Codex: the uuid is the payload's `thread_id` (= its hooks' `session_id`); the tick runs in the window, through
+  my-setup's `codex-statusline-chain` ($CODEX_STATUS_LINE_COMMAND), so pid and pane are the window's.
 
 $AGENT_TRACKER_HOME/data/sessions/<uuid>/lifecycle.jsonl     appended by `agent-tracker hook start|end`; one line < 512 bytes
 {"ts":…,"dt":"…","event":"start","source":"startup|resume|clear|compact","agent":"claude","machine":"…","boot_ts":…,
  "pid":4607,"pid_start":…,"pane_id":"%0","pane":"jeanlescut:0.0","cwd":"/Users/jeanlescut"}
 {"ts":…,"dt":"…","event":"end","reason":"exit|clear|logout|prompt_input_exit|other","pid":4607}
+  Codex hook run by Codex's shared background process (`codex app-server`, Codex ≥ 0.167; tests/test_codex_daemon.sh):
+  pid, pid_start, pane_id and pane are null (that process is not the window, and its pane is the first window's).
 
 $AGENT_TRACKER_HOME/data/claude/quota_latest.json           the account's freshest quota reading; temp + rename
 {"ts":1794051573,"dt":"…","source":"statusline|poller","machine":"…",
@@ -73,7 +77,7 @@ A reader ignores a line of `lifecycle.jsonl` without its final newline. Fixture 
 |---|---|
 | `agent-tracker tick` | stdin: the statusline JSON. Writes `last_seen.json` (§4), runs the usage recording that `src/statusline_payload_reader.py` does today (minus printing a line), updates `quota_latest.json` from the payload's `rate_limits` when fresher. **Copies stdin to stdout byte for byte.** Never fails: any error → `logs/tick-errors.log`, exit 0. Budget: < 150 ms. |
 | `agent-tracker hook start` / `hook end` [`--agent codex`] | stdin: the hook JSON. Appends one line, except for `claude -p` or an SDK process (Claude Code's live file: kind not interactive or entrypoint not cli; before it exists: `-p`/`--print` on the command line): nothing written. Prints **nothing** (SessionStart stdout would enter Claude's context). Exit 0 always. |
-| `agent-tracker now [--pane %id] [--uuid U] [--json]` | open Claude sessions of the current boot: last lifecycle event is a start, pid alive with matching pid_start, not `claude -p` nor an SDK process. Per row: uuid, pane (resolved now by pane_id through tmux), cwd, status (from `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`), last_prompt (the end of the transcript: last `user` entry that is not a tool result), last_seen. |
+| `agent-tracker now [--pane %id] [--uuid U] [--json]` | open Claude sessions of the current boot: last lifecycle event is a start, pid alive with matching pid_start (a Codex start line without pid: the pid of its `last_seen.json`, when written after the start), not `claude -p` nor an SDK process. Per row: uuid, pane (resolved now by pane_id through tmux), cwd, status (from `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`), last_prompt (the end of the transcript: last `user` entry that is not a tool result), last_seen. |
 | `agent-tracker now --json` shape | a JSON array, one object per open Claude session: `{"uuid","agent","pid","pid_start","pane_id","pane","tmux_session","window_index","pane_index","cwd","status","transcript","last_prompt":{"ts","dt"}\|null,"last_seen":{"ts","dt"}\|null}`; `status` = `busy`/`idle` from Claude Code's live file, `null` if absent. Readers: agent-auto-close, the user. (Fixed 2026-11-07 after agent-auto-close asked.) |
 | `agent-tracker check` | one line per problem, exit 1 if any: an open Claude session (from `$CLAUDE_CONFIG_DIR/sessions`; `claude -p` and SDK processes skipped) with no folder, no start line, or `last_seen.json` older than 2 min; `statusLine` in `$CLAUDE_CONFIG_DIR/settings.json` not starting with `agent-tracker tick`; the two hooks not registered. "all good" and exit 0 otherwise. |
 | `ares tmux [--dry-run] [--all] [--no-iterm]` (agent-resume) | crash restore. Previous boot = newest `boot_ts` among `data/sessions/*/` that is not the current one. Candidates: Claude sessions whose last lifecycle event is a start in that boot; per `pane_id` keep the newest; mark **stale** those whose `last_seen.ts` is more than 2 min older than the boot's newest `last_seen.ts` (restored only with `--all`). Recreate each tmux session and window (names, indexes), apply `window_layout` with `select-layout`, start `claude --resume <uuid>` in its pane (cwd), plain panes in `~`, then one iTerm2 tab per tmux session (AppleScript; `--no-iterm` skips). `--dry-run` prints the plan. Never touches a tmux session that already exists (prints it as skipped). |

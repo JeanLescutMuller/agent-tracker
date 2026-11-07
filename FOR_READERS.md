@@ -81,6 +81,7 @@ quota_latest     {"ts":1794051573,"dt":"…","source":"statusline","machine":"ch
 | # | Rule | Why |
 |---|---|---|
 | 12 | `tmux_*`, `pane*`, `window_*` are `null` outside tmux; `pid` / `pid_start` `null` when no agent process was found | a Claude session run outside tmux, or by a script |
+| 12b | A Codex start/end line with `pid`, `pane_id`, `pane` all `null`: its hook ran in Codex's shared background process (`codex app-server`, Codex ≥ 0.167), which is not the window; the window's pid and pane are in `last_seen.json`, written by its status line (`tick --agent codex`, my-setup's `codex-statusline-chain`). `now` takes them from there | one background process serves every Codex window and keeps the pane the first one was opened in (2026-11-07) |
 | 13 | **Alive = `pid` runs and its start time equals `pid_start`** (±1 s); a pid alone may have been reused | macOS and Linux reuse pids |
 | 14 | **Ignore a `lifecycle.jsonl` line without its final newline** (being written); a crash leaves a start with no end: a Claude session is open only if its last event is a start in the current boot (`boot_ts`) and its pid is alive | there is no exit entry anywhere else |
 | 15 | A pane is named by `pane_id` (`%id`), stable while tmux runs; `pane` (`session:window.pane`) was true when written: resolve `pane_id` through tmux for the place now (`agent-tracker now` does) | windows are renamed, moved |
