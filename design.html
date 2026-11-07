@@ -113,7 +113,7 @@ footer{color:var(--muted);font-size:13px}
 <header style="display:grid;gap:10px">
   <div class="eyebrow">agent-tracker · design · 2026-11-07 · proposal, nothing built</div>
   <h1>Who writes what about your Claude sessions, and who reads it</h1>
-  <p class="lede">Diagram 1 is your MacBook <b>today</b>, measured on 2026-11-07 (11:31 login → 12:48). Diagram 2 is the <b>new design</b>: two tiny files per Claude session, and everything else <b>computed when someone asks</b> (option 3, chosen 2026-11-07). In both, each row is one writing stream: <b>who writes</b> (project · stream · trigger) → <b>what exactly is written</b> (file + example) → <b>who reads it, when, and which fields</b>. Text version for agents: <code>/Users/jeanlescut/dev/agent-tracker/DESIGN.md</code>.</p>
+  <p class="lede">Diagram 1 is your MacBook <b>today</b>, measured on 2026-11-07 (11:31 login → 12:48). Diagram 2 is the <b>new design</b>: two small files per Claude session (<code>last_seen.json</code>, <code>lifecycle.jsonl</code>), and everything else <b>computed when someone asks</b> (option 3, chosen 2026-11-07). <b>Use cases</b>, right after diagram 2, say who asks, how it is triggered and how often (measured). In both, each row is one writing stream: <b>who writes</b> (project · stream · trigger) → <b>what exactly is written</b> (file + example) → <b>who reads it, when, and which fields</b>. Text version for agents: <code>/Users/jeanlescut/dev/agent-tracker/DESIGN.md</code>.</p>
   <div class="legend">
     <span class="sw p-asm"><i></i>asm</span><span class="sw p-cc"><i></i>Claude Code itself</span><span class="sw p-ntf"><i></i>agent-notify</span><span class="sw p-stl"><i></i>agent-statusline</span><span class="sw p-use"><i></i>agent-usage-tracker</span><span class="sw p-mys"><i></i>my-setup</span><span class="sw p-trk"><i></i>agent-tracker (new)</span>
   </div>
@@ -123,7 +123,7 @@ footer{color:var(--muted);font-size:13px}
     <span class="trig">⏱ timer</span> launchd or tmux ·
     <span class="trig">✉ Claude Code</span> writes or pushes it itself ·
     <span class="trig">✋ by hand</span> ·
-    <span class="trig good">🔍 when asked</span> computed at read time, nothing stored
+    <span class="trig good">🔍 on call</span> computed when the command runs, nothing stored; who calls it and how often: "Use cases"
   </div>
 </header>
 
@@ -208,7 +208,7 @@ state.env:  AGENT_STATE=Working  USER_STATE=Acknowledged</pre><div class="note">
       <div class="f"><div class="path">~/opt/agent-usage-tracker/data/claude/sessions_usages.db · session_snapshots</div><pre>ts | dt | session_id | model_id | session_cost_usd | prompt_cache
 (80,586 rows)</pre></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-use"><b>usage reports</b> <span class="when">when asked</span><br>cost per Claude session</div></div>
+      <div class="r"><div class="rd c-use"><b>usage reports</b> <span class="when">by hand</span><br>cost per Claude session</div></div>
     </div>
     <div class="row">
       <div class="w c-use bg-use"><div class="who">usage-tracker</div><div class="stream">OTel receiver</div><div><span class="trig">✉ Claude Code pushes each API request</span></div><div class="note">always running</div></div>
@@ -271,47 +271,50 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
 <!-- ========================= DIAGRAM 2: NEW ========================= -->
 <section>
   <div class="eyebrow">Diagram 2 · the new design (option 3)</div>
-  <h2>Two tiny files per Claude session; the rest computed when asked</h2>
-  <p class="lede">agent-tracker writes only what nobody else keeps and a crash would lose: <b>where</b> each Claude session runs (pane, PID, folder) and <b>whether it ended</b>. Prompts, answers and their times are already in the transcript: they are read <b>when someone asks</b>, never copied. Whether asm's search index and the usage data join agent-tracker is still open (Scope, below); here they stay where they are.</p>
+  <h2>Two small files per Claude session; the rest computed on call</h2>
+  <p class="lede">agent-tracker writes only what nobody else keeps and a crash would lose: <b>where</b> each Claude session runs (pane, PID, folder) and its <b>lifecycle</b> (each start, resume and end). Prompts, answers and their times are already in the transcript: they are read <b>when someone asks</b>, never copied. Whether asm's search index and the usage data join agent-tracker is still open (Scope, below); here they stay where they are.</p>
   <div class="diagram">
     <div class="cols-head"><span>Who writes · trigger</span><span></span><span>What is written · example</span><span></span><span>Who reads · when · which fields</span></div>
 
     <div class="sep">agent-tracker (new): ~/opt/agent-tracker/data/&lt;uuid&gt;/</div>
     <div class="row">
-      <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">last seen: <code>agent-tracker tick</code></div><div><span class="trig">⏲ every 10 s + each message</span></div><div class="note">chained before the statusline display by my-setup's <code>statusLine</code> setting · gets the UUID and folder from Claude Code on stdin, runs inside the pane ($TMUX_PANE)</div></div>
+      <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">last seen: <code>agent-tracker tick</code></div><div><span class="trig">⏲ statusline: every 10 s + each message</span></div><div class="note">no hook writes this file · rewrites it only if pane or folder changed, or once a minute · chained before the statusline display by my-setup's <code>statusLine</code> setting · gets the UUID and folder from Claude Code on stdin, runs inside the pane ($TMUX_PANE)</div></div>
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/opt/agent-tracker/data/&lt;uuid&gt;/last_seen.json</div><pre>{"ts":1794051573,"dt":"2026-11-07T11:39:33Z",
  "agent":"claude","machine":"chan-lescut-macbook-pro","boot_ts":1794046382,
  "pid":4607,"pid_start":1794047610,
  "tmux_session":"jeanlescut","window_id":"@0","pane_id":"%0","pane":"jeanlescut:0.0",
  "cwd":"/Users/jeanlescut",
- "transcript":"~/.claude/projects/-Users-jeanlescut/cbf1952e-….jsonl"}</pre><div class="note">rewritten whole each tick (temp file + rename) · <b class="good">after a crash: where every Claude session was, ≤ 10 s before</b></div></div>
+ "transcript":"~/.claude/projects/-Users-jeanlescut/cbf1952e-….jsonl"}</pre><div class="note">rewritten whole (temp file + rename), ≤ 1 per minute · <b class="good">after a crash: where every Claude session was, ≤ 1 min before</b></div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-trk"><b>agent-tracker now · open-at-crash</b> <span class="when">🔍 when asked</span><br>pane, pid, folder, ts (last seen), boot_ts</div><div class="rd c-ntf"><b>notify</b> <span class="when">at each of its hooks</span><br>UUID (from the hook) → pane_id</div><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">every 60 s</span><br>newest ts &lt; 90 s ago → poll faster</div></div>
+      <div class="r"><div class="rd c-ntf"><b>notify</b> <span class="when">machine · each notify hook · 530–2,880 / day</span><br>UUID (from the hook) → this one file → pane_id</div><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">machine · launchd · 1,440 / day</span><br>newest ts &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents (cc-map, cc-rc) · ≈ 1.4 / day</span><br>pane, pid, folder, ts</div><div class="rd c-trk"><b>open-at-crash</b> <span class="when">you · 2 in 25 days</span><br>pane, folder, ts, boot_ts</div></div>
     </div>
     <div class="row">
-      <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">ended</div><div><span class="trig">⚡ SessionEnd</span></div><div class="note">the only hook agent-tracker needs · once per Claude session, never on a crash</div></div>
+      <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">lifecycle: <code>agent-tracker hook start|end</code></div><div><span class="trig">⚡ SessionStart</span><span class="trig">⚡ SessionEnd</span></div><div class="note">moved from asm (same 2 hooks, not new ones) · measured: 17.5 starts + 11 ends / day · never an end on a crash</div></div>
       <div class="arrow">→</div>
-      <div class="f"><div class="path">~/opt/agent-tracker/data/&lt;uuid&gt;/ended</div><pre>(empty file)   its time = 2026-11-07 11:18:09 = when the Claude session ended</pre><div class="note">the transcript has no exit entry (verified on 3 ended Claude sessions)</div></div>
+      <div class="f"><div class="path">~/opt/agent-tracker/data/&lt;uuid&gt;/lifecycle.jsonl</div><pre>{"ts":1794047617,"dt":"2026-11-07T10:33:37Z","event":"start","source":"resume",
+ "agent":"claude","machine":"chan-lescut-macbook-pro","boot_ts":1794046382,
+ "pid":4607,"pid_start":1794047610,"pane_id":"%0","pane":"jeanlescut:0.0","cwd":"/Users/jeanlescut"}
+{"ts":1794050289,"dt":"2026-11-07T11:18:09Z","event":"end","reason":"exit","pid":4607}</pre><div class="note">append-only, one line per start / resume / end · the transcript has no exit entry (verified on 3 ended Claude sessions) · <b>87 of 245</b> starts in 14 days never got an end</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-trk"><b>now · open-at-crash</b> <span class="when">🔍 when asked</span><br>present → ended normally; absent → still open, or open at crash</div></div>
+      <div class="r"><div class="rd c-asm"><b>asm duplicate check</b> <span class="when">machine · each SessionStart · 17.5 / day</span><br>pids of earlier starts: still alive?</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents · ≈ 1.4 / day</span><br>last event: start (open) or end</div><div class="rd c-trk"><b>open-at-crash</b> <span class="when">you · 2 in 25 days</span><br>starts of the previous boot with no end</div></div>
     </div>
 
-    <div class="sep">read when asked, never copied</div>
+    <div class="sep">read on call (by the commands in "Use cases"), never copied</div>
     <div class="row">
       <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">transcript (unchanged)</div><div><span class="trig">✉ each message</span></div></div>
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/.claude/projects/&lt;folder&gt;/&lt;uuid&gt;.jsonl</div><pre>{"type":"user","timestamp":"2026-11-07T11:18:45Z", …}   ← last prompt
 {"type":"assistant","timestamp":"…", …}               ← last answer</pre><div class="note">the source of truth for activity: prompt and answer times, title, text</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 when asked</span><br>last prompt: read the end of the file (≤ 256 KB)</div><div class="rd c-asm"><b>asm resume</b> <span class="when">🔍 when you type it</span><br>re-reads only transcripts newer than their index entry</div><div class="rd c-use"><b>usage aggregates</b> <span class="when">every 300 s</span><br>tokens (as today)</div></div>
+      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · agents ≈ 1.4 / day</span><br>last prompt: the end of the file (≤ 256 KB)</div><div class="rd c-asm"><b>asm resume</b> <span class="when">🔍 on call · you 33 + agents 19 / 30 days</span><br>re-reads only transcripts newer than their index entry</div><div class="rd c-use"><b>usage aggregates</b> <span class="when">every 300 s</span><br>tokens (as today)</div></div>
     </div>
     <div class="row">
       <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">live session file (unchanged)</div><div><span class="trig">✉ start, busy↔idle, exit</span></div></div>
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/.claude/sessions/&lt;pid&gt;.json</div><pre>status, updatedAt, name, bridgeSessionId (Remote Control)</pre><div class="note">only useful while the Claude session runs: read live, not copied</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 when asked</span><br>busy / idle, Remote Control on?</div><div class="rd c-asm"><b>asm close</b>, <b class="p-mys">cc-map, cc-rc</b> <span class="when">by hand</span><br>as today</div></div>
+      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · agents ≈ 1.4 / day</span><br>busy / idle, Remote Control on?</div><div class="rd c-asm"><b>asm close</b>, <b class="p-mys">cc-map, cc-rc</b> <span class="when">by hand</span><br>as today</div></div>
     </div>
 
     <div class="sep">unchanged or lighter (scope still open)</div>
@@ -348,7 +351,7 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
 
     <div class="sep">removed</div>
     <div class="gonegrid">
-      <div class="w c-asm gone"><div class="who">asm lifecycle</div><div class="note">→ last_seen.json + ended</div></div>
+      <div class="w c-asm gone"><div class="who">asm lifecycle</div><div class="note">→ moved to agent-tracker's lifecycle.jsonl</div></div>
       <div class="w c-asm gone"><div class="who">asm 1800 s job (if possible)</div><div class="note">→ refreshed at search time</div></div>
       <div class="w c-ntf gone"><div class="who">notify static.env</div><div class="note">→ last_seen.json, by UUID</div></div>
       <div class="w c-stl gone"><div class="who">statusline heartbeat</div><div class="note">→ newest ts of last_seen.json</div></div>
@@ -357,10 +360,33 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
   </div>
 
   <div class="kpis">
-    <div class="kpi good"><b>1</b><span>hook for agent-tracker (SessionEnd), instead of 5</span></div>
+    <div class="kpi good"><b>0</b><span>new hooks: start and end move from asm</span></div>
     <div class="kpi good"><b>2</b><span>small files per Claude session; nothing copied from the transcript</span></div>
-    <div class="kpi good"><b>≤ 10 s</b><span>lost about where things were, in a crash</span></div>
+    <div class="kpi good"><b>≤ 1 min</b><span>lost about where things were, in a crash (enough for a restore done every ~2 weeks)</span></div>
     <div class="kpi good"><b>0 s</b><span>lag for last prompt and last active: read from the transcript when asked</span></div>
+  </div>
+</section>
+
+
+<!-- ========================= USE CASES ========================= -->
+<section>
+  <div class="eyebrow">Use cases · who triggers what, and how often</div>
+  <h2>Every command: what it is, who runs it, how often (measured)</h2>
+  <p class="lede">Each <code>agent-tracker …</code> is a <b>command</b> (a small CLI). Programs call it with <code>--json</code>; you can type it. "Machine" = run automatically (hook, statusline, timer); "agents" = an agent runs it because you asked something; "you" = typed by you. Counts: asm's lifecycle files (14 days), your zsh history and the agents' transcripts (30 days), usage-tracker's request log (7 days), Claude Code's live files (now).</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th><th>Triggered by</th><th>How often, measured</th><th>Reads · writes</th><th>Lag that matters</th></tr></thead>
+    <tbody>
+      <tr><td class="proj"><code>agent-tracker tick</code></td><td>notes where this Claude session is</td><td><b>machine</b>: the statusline, per open Claude session</td><td>every 10 s each; <b>14 open now</b> → up to 5,040 / hour if hidden panes tick too (to test) · writes ≤ 1 / min each</td><td>stdin → <code>last_seen.json</code></td><td>none</td></tr>
+      <tr><td class="proj"><code>agent-tracker hook start|end</code></td><td>logs a start, resume or end</td><td><b>machine</b>: Claude Code hooks SessionStart, SessionEnd</td><td><b>17.5 starts + 11 ends / day</b></td><td>stdin → <code>lifecycle.jsonl</code> (+1 line)</td><td>none</td></tr>
+      <tr><td class="proj">notify (no command)</td><td>finds its pane</td><td><b>machine</b>: each notify hook (≈ each tool call)</td><td><b>530–2,880 / day</b> (API requests, last 7 days): the most frequent reader</td><td>1 file: <code>data/&lt;uuid&gt;/last_seen.json</code></td><td>fast: one small file, by UUID</td></tr>
+      <tr><td class="proj">usage quota job (no command)</td><td>"is a statusline on screen?"</td><td><b>machine</b>: launchd, every 60 s</td><td><b>1,440 / day</b></td><td>newest <code>ts</code> among the current boot's <code>last_seen.json</code></td><td>seconds</td></tr>
+      <tr><td class="proj"><code>asm resume</code></td><td>find and reopen a past Claude session</td><td><b>you</b> type it · <b>agents</b> run it</td><td>you <b>33</b> + agents <b>19</b> in 30 days ≈ 1.7 / day</td><td>asm's index, refreshed for changed transcripts (4 ms + a few files)</td><td>you wait: &lt; 1 s</td></tr>
+      <tr><td class="proj"><code>agent-tracker now</code></td><td>prints the open Claude sessions: pane, folder, busy/idle, last prompt</td><td><b>agents</b>, via cc-map and cc-rc (skill claude-sessions-overview), when you ask</td><td>cc-map <b>23</b> + cc-rc <b>20</b> in 30 days ≈ 1.4 / day</td><td>~14 <code>last_seen.json</code>, live files, ~14 transcript ends</td><td>you wait: &lt; 1 s</td></tr>
+      <tr><td class="proj">terminal_snapshot</td><td>writes the restore script</td><td>today <b>agents</b>, by hand (<b>9</b> in 30 days) · proposed: <b>machine</b>, from <code>tick</code>, ≤ every 5 min</td><td>≤ 288 / day (proposed)</td><td><code>now --json</code> → <code>latest_restore.sh</code></td><td>minutes</td></tr>
+      <tr><td class="proj"><code>agent-tracker open-at-crash</code></td><td>lists what was open when the Mac died</td><td><b>you</b>, after a crash</td><td><b>2 in 25 days</b> (13 Oct, 7 Nov)</td><td>previous boot's <code>lifecycle.jsonl</code> + <code>last_seen.json</code></td><td>none</td></tr>
+    </tbody>
+  </table>
   </div>
 </section>
 
@@ -372,28 +398,30 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
   <table>
     <thead><tr><th>File</th><th>Written by</th><th>When</th><th>Holds</th><th>Why not elsewhere</th></tr></thead>
     <tbody>
-      <tr><td><code>last_seen.json</code></td><td><code>agent-tracker tick</code>, chained before the statusline by my-setup</td><td>every 10 s + each message</td><td>one JSON object, rewritten whole (temp + rename): ts, dt, agent, machine, boot_ts, pid, pid_start, tmux_session, window_id, pane_id, pane, cwd, transcript</td><td>Claude Code's live file has the pane and PID but is gone after a crash; the transcript has neither</td></tr>
-      <tr><td><code>ended</code></td><td><code>agent-tracker</code>'s SessionEnd hook</td><td>once, at <code>/exit</code>, Ctrl-D, terminal closed</td><td>nothing; its time = when the Claude session ended</td><td>the transcript has no exit entry</td></tr>
+      <tr><td><code>last_seen.json</code></td><td><code>agent-tracker tick</code>, chained before the statusline by my-setup (no hook)</td><td>statusline every 10 s; rewritten only if pane or folder changed, or once a minute</td><td>one JSON object, rewritten whole (temp + rename): ts, dt, agent, machine, boot_ts, pid, pid_start, tmux_session, window_id, pane_id, pane, cwd, transcript</td><td>Claude Code's live file has the pane and PID but is gone after a crash; the transcript has neither</td></tr>
+      <tr><td><code>lifecycle.jsonl</code></td><td><code>agent-tracker hook start|end</code> (SessionStart, SessionEnd)</td><td>each start, resume, <code>/compact</code>, end</td><td>one line per event, appended: ts, dt, event, source, agent, machine, boot_ts, pid, pid_start, pane_id, pane, cwd · end: reason</td><td>the transcript has no pane, PID or exit entry; asm keeps this today (moved)</td></tr>
     </tbody>
   </table>
   </div>
 <pre class="block">~/opt/agent-tracker/data/
 ├─ cbf1952e-21d4-41ec-af21-d33f8a96cbba/          this conversation: open
-│  └─ last_seen.json   {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","boot_ts":1794046382,"pane":"jeanlescut:0.0","pane_id":"%0","pid":4607,…}
+│  ├─ last_seen.json   {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","boot_ts":1794046382,"pane":"jeanlescut:0.0","pane_id":"%0","pid":4607,…}
+│  └─ lifecycle.jsonl  start (startup, 10:33)
 ├─ d6d2c8bb-24d3-4576-b451-782ad704dc58/          ended normally at 11:18
 │  ├─ last_seen.json   {"ts":1794050280,…,"pane":"agent-session-manager:0.0",…}
-│  └─ ended            (time 11:18:09)
-└─ 548ce520-…/                                     previous boot, no "ended", seen until 11:12:10 → <span class="k">open at crash</span>
-   └─ last_seen.json   {"ts":1794045130,"boot_ts":1794019000,"pane":"job-applications:0.0",…}</pre>
-  <p class="lede" style="font-size:13px">Your earlier ideas: <code>last_seen.json</code> is kept as you named it. <code>index.json</code> / <code>activity.jsonl</code> is dropped, because the transcript already holds every prompt and answer with its time. <code>usage.jsonl</code> waits for the scope decision.</p>
+│  └─ lifecycle.jsonl  start (10:55) · end (exit, 11:18)
+└─ 548ce520-…/                                     previous boot, last event a start, seen until 11:12 → <span class="k">open at crash</span>
+   ├─ last_seen.json   {"ts":1794045130,"boot_ts":1794019000,"pane":"job-applications:0.0",…}
+   └─ lifecycle.jsonl  start (startup, 2026-11-06 14:39) · start (resume, 2026-11-07 09:02)</pre>
+  <p class="lede" style="font-size:13px">Your ideas: <code>last_seen.json</code> is kept as you named it, written by no hook. <code>lifecycle.jsonl</code> (your point, 2026-11-07) replaces the empty <code>ended</code> file: history of starts, resumes and ends for ~30 lines a day. <code>index.json</code> / <code>activity.jsonl</code> is dropped: the transcript already holds every prompt and answer with its time. <code>usage.jsonl</code> waits for the scope decision.</p>
 </section>
 
 <!-- ========================= READ TIME ========================= -->
 <section>
-  <div class="eyebrow">Computed when asked</div>
-  <h2>What each command reads, and what it costs</h2>
+  <div class="eyebrow">Computed on call</div>
+  <h2>What each command reads (frequencies: Use cases, above)</h2>
 <pre class="block"><span class="k">agent-tracker now</span>            (cc-map, cc-rc, notify, terminal_snapshot, you)
-  for each data/&lt;uuid&gt;/ of the current boot, without "ended":
+  for each data/&lt;uuid&gt;/ whose lifecycle's last event is a start of the current boot:
     alive?      pid running AND its start time == pid_start          (a reused PID does not count)
     where?      pane_id → its place now (tmux list-panes)
     busy/idle?  ~/.claude/sessions/&lt;pid&gt;.json                      (live, Claude Code's own)
@@ -402,7 +430,7 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
 <span class="k">agent-tracker open-at-crash</span>  (you, the restore, once after a crash)
   prev_boot  = the newest boot_ts that is not the current one
   last_tick  = the newest ts among prev_boot's folders                 (≈ the moment of the crash)
-  each folder of prev_boot without "ended", with ts ≥ last_tick − 60 s  (killed ones stopped ticking earlier)
+  each folder whose last lifecycle event is a start in prev_boot, with ts ≥ last_tick − 2 min  (killed ones stopped ticking)
   one per pane_id: the newest ts wins                                   (the pane was reused)
 
 <span class="k">asm resume</span>
@@ -432,7 +460,7 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
     <tbody>
       <tr><td>UUID, pid, folder, tmux pane</td><td class="good">yes</td><td>folder only</td><td class="no">pane, pid gone</td><td class="good">yes, <code>last_seen.json</code></td></tr>
       <tr><td>last seen (while idle too)</td><td class="meh">updatedAt only on busy↔idle</td><td class="no">no</td><td class="no">gone</td><td class="good">yes, <code>last_seen.json</code> ts</td></tr>
-      <tr><td>ended normally</td><td class="meh">file deleted</td><td class="no">no exit entry</td><td>can't tell from a crash</td><td class="good">yes, <code>ended</code></td></tr>
+      <tr><td>start, resume, end history</td><td class="meh">file created / deleted</td><td class="no">no exit entry</td><td>can't tell from a crash</td><td class="good">yes, <code>lifecycle.jsonl</code></td></tr>
       <tr><td>prompt and answer times, last prompt, title</td><td class="no">no</td><td class="good">yes</td><td class="good">kept</td><td class="no">no: read from the transcript</td></tr>
       <tr><td>busy / idle, name, Remote Control</td><td class="good">yes</td><td>—</td><td class="no">gone (not needed then)</td><td class="no">no: read live</td></tr>
       <tr><td>anything Codex</td><td class="no">no such file</td><td>its own rollout files</td><td>—</td><td class="good">yes, same two files</td></tr>
@@ -495,7 +523,7 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
     <tbody>
       <tr><td>two Claude sessions</td><td class="good">no</td><td>one folder each</td></tr>
       <tr><td>two ticks of one Claude session</td><td class="meh">yes, <code>last_seen.json</code></td><td>temp file + rename: a reader sees the old or the new file, never half; the last one wins, which is the right answer</td></tr>
-      <tr><td>SessionEnd hook</td><td class="good">no</td><td>writes only <code>ended</code>, once</td></tr>
+      <tr><td>two hooks of one Claude session (a resume starting while the old process ends)</td><td class="meh">yes, <code>lifecycle.jsonl</code></td><td>one append of &lt; 512 bytes each (<code>&gt;&gt;</code>): appended whole, never mixed; ~30 lines a day in total, so a clash is very rare. <i>To test on APFS.</i></td></tr>
       <tr><td>a power cut mid-write</td><td>—</td><td>rename is all-or-nothing: the old <code>last_seen.json</code> stays</td></tr>
       <tr><td><b>today:</b> the heartbeat, written by every Claude session</td><td class="no">yes</td><td>last writer wins, so it can't say which Claude session is open</td></tr>
     </tbody>
@@ -554,9 +582,9 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
     <thead><tr><th>#</th><th>Step</th><th>Touches</th><th>Done when</th></tr></thead>
     <tbody>
       <tr><td class="n">1</td><td>this design, reviewed by you; the scope and the restore decided</td><td>agent-tracker</td><td>you say yes</td></tr>
-      <tr><td class="n">2</td><td><code>tick</code> + the SessionEnd hook + my-setup's chain, beside today's streams; nothing removed</td><td>agent-tracker, my-setup</td><td>a folder per Claude session, for 2 days</td></tr>
+      <tr><td class="n">2</td><td><code>tick</code> + <code>hook start|end</code> + my-setup's chain, beside today's streams; nothing removed</td><td>agent-tracker, my-setup</td><td>a folder per Claude session, for 2 days</td></tr>
       <tr><td class="n">3</td><td><code>now</code>, <code>open-at-crash</code>; terminal_snapshot on top</td><td>agent-tracker, my-setup</td><td>a killed test tmux gets its Claude sessions back</td></tr>
-      <tr><td class="n">4</td><td>asm: index refreshed at search time; lifecycle (and maybe the 1800 s job) removed</td><td>asm</td><td><code>asm resume --state pending</code> gives the same list, with no lag</td></tr>
+      <tr><td class="n">4</td><td>asm: index refreshed at search time; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job</td><td>asm</td><td><code>asm resume --state pending</code> gives the same list, with no lag</td></tr>
       <tr><td class="n">5</td><td>notify, cc-map/cc-rc, usage quota job read it; their copies removed</td><td>each repo</td><td>each one's tests pass</td></tr>
     </tbody>
   </table>
@@ -564,7 +592,7 @@ minus session_state → "ended" file</pre><div class="note">last_active is never
   <div class="tablewrap">
   <table>
     <tbody>
-      <tr><td>Does Claude Code run the statusline while its pane is hidden (another tmux window)?</td><td>decides whether last seen means "open" or "on screen", and the 60 s rule of open-at-crash · test in step 2</td></tr>
+      <tr><td>Does Claude Code run the statusline while its pane is hidden (another tmux window)?</td><td>decides whether last seen means "open" or "on screen", the 2-min rule of open-at-crash, and the tick count (5,040 / hour with 14 open) · test in step 2</td></tr>
       <tr><td>Scope: asm's search index, usage and quotas</td><td>open: join agent-tracker or stay apart</td></tr>
       <tr><td>Does the VM sync still need asm's 1800 s job?</td><td>if not, it goes</td></tr>
       <tr><td>Codex: statusline interval, SessionEnd hook</td><td>not measured: no Codex session today</td></tr>
