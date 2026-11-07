@@ -97,7 +97,7 @@ The user's layout (2026-11-07): `last_seen.json` kept as named, written by no ho
 ## 5. Reading, and lookups
 
 ```text
-agent-tracker now   (cc-map, cc-rc, the user)
+agent-tracker now   (the user: the visibility view)
   for each data/sessions/<uuid>/ whose lifecycle's last event is a start of the current boot:
     alive?       pid running AND its start time == pid_start         # a reused PID does not count
     where?       pane_id -> its place now (tmux list-panes)
@@ -128,7 +128,7 @@ Every hook and the statusline receive the UUID from Claude Code on stdin, so the
 | asm close | a picked Claude session | `~/.claude/sessions/*.json` → pid | unchanged (live) |
 | asm duplicate check | UUID | `lifecycles/<uuid>.jsonl` → old pids | `data/sessions/<uuid>/lifecycle.jsonl` → old pids |
 | notify hooks | shell PID | `/tmp/agent-notify-$USER/<shell_pid>/` | UUID (hook) → `data/sessions/<uuid>/last_seen.json` → pane |
-| cc-map, cc-rc | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | `now --pane` |
+| cc-map, cc-rc | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | parked (§10) |
 | terminal_snapshot → `ares tmux` | the previous boot | pane → process tree → `~/.claude/sessions/<pid>.json` | the previous boot's `data/sessions/*/lifecycle.jsonl` + `last_seen.json`, read directly |
 | usage quota job | agent type | `heartbeat/claude` age | newest ts among `data/sessions/*/last_seen.json` |
 | usage payload, Chrome kit | UUID | their own stores | unchanged |
@@ -144,7 +144,7 @@ Each `agent-tracker …` is a command (a small CLI): programs call it with `--js
 | notify (no command) | finds its pane | machine: each notify hook (≈ each tool call) | 530–2,880 / day (API requests): the most frequent reader | 1 file, `data/sessions/<uuid>/last_seen.json`, by UUID | must be fast |
 | usage quota job (no command) | "is a statusline on screen?" | machine: launchd, 60 s | 1,440 / day | newest `ts` among the current boot's `last_seen.json` | seconds |
 | `asm resume` | find and reopen a past Claude session | you · agents | you 33 + agents 19 in 30 days ≈ 1.7 / day | asm's index, refreshed for changed transcripts | the user waits: < 1 s |
-| `agent-tracker now` | prints open Claude sessions: pane, folder, busy/idle, last prompt | agents, via cc-map and cc-rc (skill claude-sessions-overview) | cc-map 23 + cc-rc 20 in 30 days ≈ 1.4 / day | ~14 `last_seen.json`, live files, ~14 transcript ends | the user waits: < 1 s |
+| `agent-tracker now` | prints open Claude sessions: pane, folder, busy/idle, last prompt (the visibility view) | the user | new: no program reads it (cc-map 23 + cc-rc 20 runs in 30 days, both parked, §10) | ~14 `last_seen.json`, live files, ~14 transcript ends | the user waits: < 1 s |
 | `ares tmux` (asm) | finds what was open at the crash, then puts back every tmux session, window and pane size, `claude --resume` in each Claude pane, one iTerm2 tab per tmux session | you, after a crash | 2 in 25 days (today's terminal_snapshot: agents ran it 9 times in 30 days) | the previous boot's `lifecycle.jsonl` + `last_seen.json` → acts on tmux and iTerm2 | none |
 | `agent-tracker check` | says whether every writer is writing on this machine (statusLine chained, hooks installed, a fresh `last_seen.json` for each open Claude session) | you, after installing on a machine; later maybe a job-runner canary | new: not measured | `~/.claude/sessions`, `data/`, `~/.claude/settings.json` · writes nothing | none |
 
@@ -176,7 +176,7 @@ Claude Code runs one `statusLine` command; the key is owned by my-setup (`module
 | notify | its `/tmp` copy of shell PID, agent PID, pane, UUID, cwd | its states and colors, its own hooks |
 | statusline | the per-agent heartbeat (→ newest `last_seen.json` ts); its call to `statusline_payload_reader.py` (→ `tick`) | the display, reading `data/claude/quota_latest.json` |
 | usage-tracker | its name (→ agent-tracker); reading the heartbeat | everything else: databases, OTel receiver, aggregates, quota polls, `FOR_READERS.md` |
-| my-setup | cc-map/cc-rc's process-tree walk; `tools/terminal_snapshot.py` (→ `ares tmux`); resurrect + continuum (once `ares tmux` works) | the Chrome kit; the `statusLine` chain (§6) |
+| my-setup | cc-map, cc-rc and the skill claude-sessions-overview (parked, §10); `tools/terminal_snapshot.py` (→ `ares tmux`); resurrect + continuum (once `ares tmux` works) | the Chrome kit; the `statusLine` chain (§6) |
 
 **The crash restore (decided, the user, 2026-11-07):** it moves to asm as `ares tmux` ("asm finds and resumes: one Claude session or a whole setup"). It reads the previous boot's `lifecycle.jsonl` and `last_seen.json` directly (the rule above), recreates each tmux session and window, applies each window's saved `window_layout` (exact pane sizes), types `claude --resume <uuid>` in each Claude pane, opens plain-shell panes in `~` (their folder is not recorded), and opens one iTerm2 tab per tmux session. **Rejected:** Claude panes only, split evenly (loses pane sizes and plain shells); a full snapshot of tmux and iTerm2 on a timer (exact, but one more writer and 288 runs a day). my-setup's `terminal_snapshot.py` (2026-11-01) and resurrect + continuum (2026-11-07) are removed once it works.
 
@@ -200,15 +200,15 @@ Claude Code runs one `statusLine` command; the key is owned by my-setup (`module
 | 2 | `tick` + `hook start|end` + my-setup's chain, beside today's streams; nothing removed | agent-tracker, my-setup | a `data/sessions/<uuid>/` folder with both files for every Claude session, for 2 days |
 | 3 | `now` and `check` (agent-tracker); `ares tmux` (asm); then remove `terminal_snapshot.py` and resurrect + continuum | agent-tracker, asm, my-setup | a killed test tmux gets its windows, pane sizes and Claude sessions back |
 | 4 | asm: index refreshed at search time; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job | asm | `asm resume --state pending` gives the same list, with no lag |
-| 5 | notify, cc-map/cc-rc, usage quota job read it; their copies removed | each repo | each one's tests pass |
+| 5 | notify and the usage quota job read it; their copies removed; cc-map, cc-rc and the skill parked; asm's `status` removed | each repo | each one's tests pass |
 
 ## 10. The projects around agent-tracker (decided by the user, 2026-11-07)
 
 agent-tracker records; the features live in three projects that read it. One job each:
 
 ```text
-agent-tracker     data + visibility   tick · hook start|end · now (← cc-map's list) · check      (was agent-usage-tracker)
-agent-resume      search & resume     ares resume · ares inject · ares tmux (← terminal_snapshot) · ares rc (← cc-rc, phone)   (was asm)
+agent-tracker     data + visibility   tick · hook start|end · now · check      (was agent-usage-tracker)
+agent-resume      search & resume     ares resume · ares inject · ares tmux (← terminal_snapshot)   (was asm)
 agent-auto-close  closing             close by hand (← asm close) + when to close idle Claude sessions
 ```
 
@@ -217,8 +217,8 @@ agent-auto-close  closing             close by hand (← asm close) + when to cl
 | asm is renamed **agent-resume**, command **`ares`** (free on the Mac; `asr` is taken by /usr/sbin/asr); `asm` kept as an alias for a while | its one job is search and resume: inject, the tmux restore and the phone's Remote Control are other ways of resuming |
 | `asm close` moves to **agent-auto-close**, action and policy together | verified in `agent-session-manager/src/asm:1538-1716`: close shares no data with resume (its screen file in `data/close-tombstones/` is never read by resume; the resume command it pre-types is plain `claude --resume`); the only shared code is the keyword picker, not needed for 3 manual closes in 30 days |
 | crash restore = **`ares tmux`** | `asm`'s own DEV_DOC.md §R4/R5 (line 233) already planned crash recovery and tmux layout restore, "not implemented" |
-| cc-rc and the skill claude-sessions-overview → **agent-resume** (`ares rc`); cc-map's listing → `agent-tracker now` | open: proposed, not yet confirmed by the user |
-| asm's `status` script: **remove** | proposed: written at Meta, reason not recorded (searched git, GitHub, DEV_DOC, past conversations); what it shows (UUID, model, $) is on the statusline now |
+| cc-map, cc-rc and the skill claude-sessions-overview: **parked**, not moved | built 2026-10-17 to turn /rc on one Claude session at a time from the phone; since 2026-10-22 (my-setup `ae5a3ae`, `remoteControlAtStartup = true`) every Claude session has Remote Control and shows in the Claude app's Code tab by itself (the user, 2026-11-07) |
+| asm's `status` script: **remove** (decided, the user, 2026-11-07) | written at Meta, reason not recorded (searched git, GitHub, DEV_DOC, past conversations); what it shows (UUID, model, $) is on the statusline now |
 
 ## Acceptance
 

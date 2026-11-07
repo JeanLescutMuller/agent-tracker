@@ -262,7 +262,7 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
   </div>
 
   <div class="kpis">
-    <div class="kpi bad"><b>4</b><span>places keep "which Claude session is in which pane" (asm, notify, Claude Code, terminal_snapshot)</span></div>
+    <div class="kpi bad"><b>4</b><span>places keep "which Claude session is in which pane" (asm, notify, Claude Code, terminal_snapshot), and cc-map works it out a 5th time</span></div>
     <div class="kpi bad"><b>2</b><span>of them vanish in a crash (Claude Code's, notify's)</span></div>
     <div class="kpi warn"><b>30 min</b><span>the most asm's "last active" can be late</span></div>
     <div class="kpi bad"><b>0</b><span>keep a <b>last seen</b> per Claude session</span></div>
@@ -289,7 +289,7 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
  "cwd":"/Users/jeanlescut",
  "transcript":"~/.claude/projects/-Users-jeanlescut/cbf1952e-….jsonl"}</pre><div class="note">rewritten whole (temp file + rename), ≤ 1 per minute · <b class="good">after a crash: where every Claude session was, ≤ 1 min before</b></div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-ntf"><b>notify</b> <span class="when">machine · each notify hook · 530–2,880 / day</span><br>UUID (from the hook) → this one file → pane_id</div><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">machine · launchd · 1,440 / day</span><br>newest ts &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents (cc-map, cc-rc) · ≈ 1.4 / day</span><br>pane, pid, folder, ts</div><div class="rd c-asm"><b>ares tmux</b> <span class="when">you · after a crash · 2 in 25 days</span><br>pane, window_layout, folder, ts, boot_ts</div><div class="rd c-trk"><b>agent-tracker check</b> <span class="when">you · after an install</span><br>is it fresh (&lt; 2 min)?</div></div>
+      <div class="r"><div class="rd c-ntf"><b>notify</b> <span class="when">machine · each notify hook · 530–2,880 / day</span><br>UUID (from the hook) → this one file → pane_id</div><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">machine · launchd · 1,440 / day</span><br>newest ts &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">you · visibility · new</span><br>pane, pid, folder, ts</div><div class="rd c-asm"><b>ares tmux</b> <span class="when">you · after a crash · 2 in 25 days</span><br>pane, window_layout, folder, ts, boot_ts</div><div class="rd c-trk"><b>agent-tracker check</b> <span class="when">you · after an install</span><br>is it fresh (&lt; 2 min)?</div></div>
     </div>
     <div class="row">
       <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">lifecycle: <code>agent-tracker hook start|end</code></div><div><span class="trig">⚡ SessionStart</span><span class="trig">⚡ SessionEnd</span></div><div class="note">moved from asm (same 2 hooks, not new ones) · measured: 17.5 starts + 11 ends / day · never an end on a crash</div></div>
@@ -309,14 +309,14 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
       <div class="f"><div class="path">~/.claude/projects/&lt;folder&gt;/&lt;uuid&gt;.jsonl</div><pre>{"type":"user","timestamp":"2026-11-07T11:18:45Z", …}   ← last prompt
 {"type":"assistant","timestamp":"…", …}               ← last answer</pre><div class="note">the source of truth for activity: prompt and answer times, title, text</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · agents ≈ 1.4 / day</span><br>last prompt: the end of the file (≤ 256 KB)</div><div class="rd c-asm"><b>asm resume</b> <span class="when">🔍 on call · you 33 + agents 19 / 30 days</span><br>re-reads only transcripts newer than their index entry</div><div class="rd c-use"><b>usage aggregates</b> <span class="when">every 300 s</span><br>tokens (as today)</div></div>
+      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · you · visibility</span><br>last prompt: the end of the file (≤ 256 KB)</div><div class="rd c-asm"><b>asm resume</b> <span class="when">🔍 on call · you 33 + agents 19 / 30 days</span><br>re-reads only transcripts newer than their index entry</div><div class="rd c-use"><b>usage aggregates</b> <span class="when">every 300 s</span><br>tokens (as today)</div></div>
     </div>
     <div class="row">
       <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">live session file (unchanged)</div><div><span class="trig">✉ start, busy↔idle, exit</span></div></div>
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/.claude/sessions/&lt;pid&gt;.json</div><pre>status, updatedAt, name, bridgeSessionId (Remote Control)</pre><div class="note">only useful while the Claude session runs: read live, not copied</div></div>
       <div class="arrow">→</div>
-      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · agents ≈ 1.4 / day</span><br>busy / idle, Remote Control on?</div><div class="rd c-asm"><b>asm close</b>, <b class="p-mys">cc-map, cc-rc</b> <span class="when">by hand</span><br>as today</div></div>
+      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · you · visibility</span><br>busy / idle</div><div class="rd c-asm"><b>agent-auto-close</b> (was asm close) <span class="when">by hand · 3 / 30 days</span><br>pid, status, tmux pane</div></div>
     </div>
 
     <div class="sep">unchanged or lighter (scope still open)</div>
@@ -372,6 +372,8 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <div class="w c-stl gone"><div class="who">statusline heartbeat</div><div class="note">→ newest ts of last_seen.json</div></div>
       <div class="w c-mys gone"><div class="who">terminal_snapshot.py (my-setup)</div><div class="note">→ ares tmux</div></div>
       <div class="w c-mys gone"><div class="who">resurrect + continuum</div><div class="note">→ ares tmux (once it works)</div></div>
+      <div class="w c-mys gone"><div class="who">cc-map, cc-rc, skill claude-sessions-overview</div><div class="note">parked: every Claude session has Remote Control since 2026-10-22</div></div>
+      <div class="w c-asm gone"><div class="who">asm status</div><div class="note">its UUID, model, $ are on the statusline</div></div>
     </div>
   </div>
 
@@ -399,7 +401,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td class="proj">statusline display (no command)</td><td>shows the quota %</td><td><b>machine</b>: the statusline, per open Claude session</td><td>every 10 s each: up to 5,040 / hour with 14 open (if hidden panes tick)</td><td>1 small file: <code>data/claude/quota_latest.json</code></td><td>seconds</td></tr>
       <tr><td class="proj">usage quota job (no command)</td><td>"is a statusline on screen?"</td><td><b>machine</b>: launchd, every 60 s</td><td><b>1,440 / day</b></td><td>newest <code>ts</code> among the current boot's <code>last_seen.json</code></td><td>seconds</td></tr>
       <tr><td class="proj"><code>asm resume</code></td><td>find and reopen a past Claude session</td><td><b>you</b> type it · <b>agents</b> run it</td><td>you <b>33</b> + agents <b>19</b> in 30 days ≈ 1.7 / day</td><td>asm's index, refreshed for changed transcripts (4 ms + a few files)</td><td>you wait: &lt; 1 s</td></tr>
-      <tr><td class="proj"><code>agent-tracker now</code></td><td>prints the open Claude sessions: pane, folder, busy/idle, last prompt</td><td><b>agents</b>, via cc-map and cc-rc (skill claude-sessions-overview), when you ask</td><td>cc-map <b>23</b> + cc-rc <b>20</b> in 30 days ≈ 1.4 / day</td><td>~14 <code>last_seen.json</code>, live files, ~14 transcript ends</td><td>you wait: &lt; 1 s</td></tr>
+      <tr><td class="proj"><code>agent-tracker now</code></td><td>prints the open Claude sessions: pane, folder, busy/idle, last prompt (the visibility view)</td><td><b>you</b>, when you want to see what runs where</td><td>new: no program reads it (cc-map and cc-rc, 23 + 20 runs in 30 days, are parked)</td><td>~14 <code>last_seen.json</code>, live files, ~14 transcript ends</td><td>you wait: &lt; 1 s</td></tr>
       <tr><td class="proj"><code>ares tmux</code> (asm)</td><td>finds what was open at the crash, then puts back every tmux session, window, pane size, and <code>claude --resume</code> in each Claude pane; one iTerm2 tab per tmux session</td><td><b>you</b>, after a crash</td><td><b>2 in 25 days</b> (today terminal_snapshot: agents ran it 9 times in 30 days)</td><td>the previous boot's <code>lifecycle.jsonl</code> + <code>last_seen.json</code>, read directly → acts on tmux and iTerm2</td><td>none</td></tr>
       <tr><td class="proj"><code>agent-tracker check</code></td><td>says whether every writer is writing on this machine: statusLine chained, hooks installed, a fresh <code>last_seen.json</code> for each open Claude session</td><td><b>you</b>, after installing on a machine (later maybe a job-runner canary)</td><td>new: not measured</td><td><code>~/.claude/sessions</code>, <code>data/</code>, <code>~/.claude/settings.json</code> · writes nothing</td><td>none</td></tr>
     </tbody>
@@ -437,7 +439,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
 <section>
   <div class="eyebrow">Computed on call</div>
   <h2>What each command reads (frequencies: Use cases, above)</h2>
-<pre class="block"><span class="k">agent-tracker now</span>            (cc-map, cc-rc, you)
+<pre class="block"><span class="k">agent-tracker now</span>            (you: the visibility view)
   for each data/sessions/&lt;uuid&gt;/ whose lifecycle's last event is a start of the current boot:
     alive?      pid running AND its start time == pid_start          (a reused PID does not count)
     where?      pane_id → its place now (tmux list-panes)
@@ -504,7 +506,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td class="proj">asm close</td><td>a picked Claude session</td><td><code>~/.claude/sessions/*.json</code> → pid</td><td>unchanged (live)</td></tr>
       <tr><td class="proj">asm duplicate check</td><td>UUID (hook)</td><td><code>lifecycles/&lt;uuid&gt;.jsonl</code> → old pids</td><td><code>data/sessions/&lt;uuid&gt;/last_seen.json</code> → pid still alive?</td></tr>
       <tr><td class="proj">notify hooks</td><td><b>shell PID</b></td><td><code>/tmp/agent-notify-$USER/&lt;shell_pid&gt;/</code></td><td><b>UUID</b> (hook) → <code>data/sessions/&lt;uuid&gt;/last_seen.json</code> → pane</td></tr>
-      <tr><td class="proj">cc-map, cc-rc</td><td><b>tmux pane</b></td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td><code>agent-tracker now --pane</code></td></tr>
+      <tr><td class="proj">cc-map, cc-rc</td><td><b>tmux pane</b></td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td class="no">parked (every Claude session has Remote Control since 2026-10-22)</td></tr>
       <tr><td class="proj">terminal_snapshot → ares tmux</td><td>tmux pane · the previous boot</td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td>the previous boot's <code>data/sessions/*/</code>, read directly</td></tr>
       <tr><td class="proj">usage quota job</td><td>agent type</td><td><code>heartbeat/claude</code> age</td><td>newest ts among <code>data/sessions/*/last_seen.json</code></td></tr>
       <tr><td class="proj">statusline display</td><td>the account (not a Claude session)</td><td>pipes its JSON to usage-tracker's <code>statusline_payload_reader.py</code>, which prints back the freshest quota</td><td>reads <code>data/claude/quota_latest.json</code>; no tracker code in the display</td></tr>
@@ -579,8 +581,8 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
 <section>
   <div class="eyebrow">The projects around agent-tracker · decided 2026-11-07</div>
   <h2>One job each: record, resume, close</h2>
-<pre class="block"><span class="k">agent-tracker</span>     data + visibility   tick · hook start|end · now (← cc-map's list) · check      (was agent-usage-tracker)
-<span class="k">agent-resume</span>      search &amp; resume     ares resume · ares inject · ares tmux (← terminal_snapshot) · ares rc (← cc-rc, phone)   (was asm)
+<pre class="block"><span class="k">agent-tracker</span>     data + visibility   tick · hook start|end · now · check      (was agent-usage-tracker)
+<span class="k">agent-resume</span>      search &amp; resume     ares resume · ares inject · ares tmux (← terminal_snapshot)   (was asm)
 <span class="k">agent-auto-close</span>  closing             close by hand (← asm close) + when to close idle Claude sessions</pre>
   <div class="tablewrap">
   <table>
@@ -589,8 +591,8 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td>asm → <b>agent-resume</b>, command <b><code>ares</code></b> (<code>asm</code> kept as an alias for a while)</td><td class="good">decided</td><td>its one job is search and resume; inject, the tmux restore and the phone's Remote Control are other ways of resuming. <code>asr</code> is taken (/usr/sbin/asr)</td></tr>
       <tr><td><code>asm close</code> → <b>agent-auto-close</b>, action and policy together</td><td class="good">decided</td><td>close shares no data with resume (its screen file is never read by resume); only the keyword picker is shared, not needed for 3 manual closes a month</td></tr>
       <tr><td>crash restore = <b><code>ares tmux</code></b></td><td class="good">decided</td><td>asm's DEV_DOC.md (R4/R5) already planned crash recovery and tmux layout restore, "not implemented"</td></tr>
-      <tr><td>cc-rc + skill claude-sessions-overview → <code>ares rc</code>; cc-map's list → <code>agent-tracker now</code></td><td class="meh">proposed</td><td>reaching a running Claude session from the phone is resuming it there</td></tr>
-      <tr><td>asm's <code>status</code> script: remove</td><td class="meh">proposed</td><td>written at Meta, reason never recorded; what it shows (UUID, model, $) is on the statusline now</td></tr>
+      <tr><td>cc-map, cc-rc and the skill claude-sessions-overview: <b>parked</b> (not moved)</td><td class="good">decided</td><td>built 2026-10-17 to turn /rc on one Claude session at a time from the phone; since 2026-10-22 (my-setup <code>ae5a3ae</code>, <code>remoteControlAtStartup</code>) every Claude session has Remote Control and shows in the Claude app's Code tab by itself</td></tr>
+      <tr><td>asm's <code>status</code> script: remove</td><td class="good">decided</td><td>written at Meta, reason never recorded; what it shows (UUID, model, $) is on the statusline now</td></tr>
     </tbody>
   </table>
   </div>
@@ -632,7 +634,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td class="n">2</td><td><code>tick</code> (session files + the payload reader moved in, + <code>quota_latest.json</code>) + <code>hook start|end</code> + my-setup's chain; the statusline display reads <code>quota_latest.json</code>; nothing else removed</td><td>agent-tracker, agent-statusline, my-setup</td><td>a folder per Claude session, for 2 days</td></tr>
       <tr><td class="n">3</td><td><code>now</code> and <code>check</code> (agent-tracker); <code>ares tmux</code> (asm); then remove terminal_snapshot.py and resurrect + continuum</td><td>agent-tracker, asm, my-setup</td><td>a killed test tmux gets its windows, pane sizes and Claude sessions back</td></tr>
       <tr><td class="n">4</td><td>asm: index refreshed at search time; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job</td><td>asm</td><td><code>asm resume --state pending</code> gives the same list, with no lag</td></tr>
-      <tr><td class="n">5</td><td>notify, cc-map/cc-rc, usage quota job read it; their copies removed</td><td>each repo</td><td>each one's tests pass</td></tr>
+      <tr><td class="n">5</td><td>notify and the usage quota job read it; their copies removed; cc-map, cc-rc and the skill parked; asm's <code>status</code> removed</td><td>each repo</td><td>each one's tests pass</td></tr>
     </tbody>
   </table>
   </div>
