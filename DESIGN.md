@@ -1,144 +1,129 @@
 # Design — agent-tracker
 
-One project, the only writer of "which Claude session runs where, when it started, its last prompt, when it was last seen, whether it ended". Every other project only reads it. Guiding principle: a Unix tool, one job, no overlap; nothing new is kept that Claude Code or tmux already keeps. Words: the `## Vocabulary` table of [`AGENTS.md`](AGENTS.md). Status: proposal, 2026-11-07, waiting for the user's review; nothing is built.
+One project, the only writer of the two facts about a Claude session that nobody else keeps and a crash would lose: **where it runs** (pane, PID, folder, last seen) and **whether it ended**. Everything else (prompts, answers, their times, busy/idle) is already kept by Claude Code and is **computed when someone asks**, never copied (option 3, chosen by the user 2026-11-07). Guiding principle: a Unix tool, one job, no overlap. Words: the `## Vocabulary` table of [`AGENTS.md`](AGENTS.md). The page for the user, same content with diagrams: [`design.html`](design.html). Status: proposal, 2026-11-07; nothing is built.
 
 | | |
 |---|---|
-| Command | `agent-tracker now` (what runs where, now) · `agent-tracker open-at-crash` (what was open when the previous boot ended) · both with `--json` |
-| Reads | its own files (below), `ps`, `tmux list-panes`, `sysctl kern.boottime` |
-| Writes | one folder per Claude session, `~/opt/agent-tracker/data/<uuid>/`: `last_seen.json` (rewritten every 10 s) · `activity.jsonl` (append-only, one line per event) · `usage.jsonl` (open, §7) |
-| Triggered by | Claude/Codex hooks (start, prompt, stop, waiting, end) and the statusline tick (every 10 s). No daemon, no scheduled job |
-| Acts | no; append < 512 bytes per event, rewrite ~400 bytes per tick |
-| Consumed by | asm, notify, agent-usage-tracker, cc-map / cc-rc, the crash restore |
+| Command | `agent-tracker tick` (statusline) · `agent-tracker end` (SessionEnd hook) · `agent-tracker now [--pane %id] [--json]` · `agent-tracker open-at-crash [--json]` |
+| Reads | its own files, `~/.claude/sessions/<pid>.json` (live), the end of transcripts, `ps`, `tmux list-panes`, `sysctl kern.boottime` |
+| Writes | `~/opt/agent-tracker/data/<uuid>/last_seen.json` (rewritten every 10 s) · `~/opt/agent-tracker/data/<uuid>/ended` (empty, once) |
+| Triggered by | the statusline tick (every 10 s + each message) and one hook, SessionEnd. No daemon, no timer |
+| Acts | no; ~400 bytes rewritten per tick, one empty file per ended Claude session |
+| Consumed by | asm, notify, agent-usage-tracker's quota job, cc-map / cc-rc, terminal_snapshot |
 
-## 0. What exists today (measured 2026-11-07, 11:31–12:21, one boot)
+## 0. What exists today (measured 2026-11-07, 11:31–12:48, one boot)
 
-Sources: a read-only inventory of the repos (file:line in [`design.html`](design.html)), `launchctl`, the plists in `~/Library/LaunchAgents/`, a 60 s sample of file writes every 0.25 s (12:05), and file ages at 12:20. Login was 11:31, so "runs since login" covers 50 min.
+Sources: a read-only inventory of the repos (file:line in the inventory report), `launchctl`, the plists in `~/Library/LaunchAgents/`, a 60 s sample of file writes every 0.25 s (12:05), file ages at 12:20, real examples read at 12:40, transcripts of this conversation and of 3 ended Claude sessions. Login was 11:31, so "runs since login" covers 50 min.
 
-| # | Project · mechanism | Trigger | Interval, theory | In practice | Writes | Survives a crash | Read by | Lag of what readers see |
+| # | Project · stream | Trigger | Interval, theory | In practice | Writes | Survives a crash | Read by (looks up by) | Lag readers see |
 |---|---|---|---|---|---|---|---|---|
-| 1 | asm · lifecycle | hooks SessionStart, SessionEnd | per event | 0 writes in the 60 s sample | `~/opt/agent-session-manager/data/lifecycles/<uuid>.jsonl` (436 files) | yes | asm index, asm's duplicate check | none; but a crashed session stays "pending" for ever (47 such files at the 11:12 crash) |
-| 2 | asm · index | SessionEnd + scheduled | 1800 s | 2 runs in 50 min (expected 1.7 + 1 at login) | `data/indexes/<uuid>.json` | yes | `asm resume` | last_active of a live session: 1085 s behind its transcript (18 s) at 12:20 |
-| 3 | asm · `close` | computed at read time | when typed | | nothing | | `asm close` | none |
-| 4 | notify · per-shell state | hooks SessionStart, UserPromptSubmit, PreToolUse, Stop, Notification, SessionEnd; tmux select-pane; refresh piggybacked on any call | per event; refresh ≤ every 300 s | state.env 83 s and 114 s old at 12:20 | `/tmp/agent-notify-$USER/<shell_pid>/{static,state}.env` | **no** (/tmp) | notify's renderers (pane colors), cc-map | none for state; no timestamps kept |
-| 5 | statusline · heartbeat | statusline tick | 10 s (`refreshInterval: 10`) + on each message | 10 writes in 60 s, gaps 0.8–10.1 s | `~/opt/agent-statusline/state/heartbeat/{claude,codex}`: **one time per agent, not per Claude session** | yes | agent-usage-tracker's quota polls only (age < 90 s) | ≤ 10 s; codex file 11.6 days old |
-| 6 | usage-tracker · statusline payload | statusline tick | 10 s | 26 writes in 60 s (state folder) | `data/claude/sessions_usages.db` (SQLite) | yes | its reports | ≤ 10 s |
-| 7 | usage-tracker · OTel | pushed by Claude Code | every few seconds | receiver running since login | same db, table telemetry | yes | aggregates | seconds |
-| 8 | usage-tracker · transcripts | scheduled | 300 s | 10 runs in 50 min (expected 10) | `data/claude/intermediary.db` | yes | 5-min slots | ≤ 300 s |
-| 9 | usage-tracker · quota polls | scheduled | 60 s (claude, codex) | 46 runs in 50 min (expected 50) | quota files | yes | statusline | 110–480 s, by design |
-| 10 | my-setup · Chrome kit hook | hooks PreToolUse (Chrome, Bash), PostToolUse, UserPromptSubmit, Stop, SubagentStop | per event | 2 writes in 60 s | `~/opt/my-setup/state/chrome/` | yes | the hook, agent-chrome | none; tabs only, no liveness |
-| 11 | my-setup · cc-map, cc-rc | computed at read time from `~/.claude/sessions/*.json`, tmux, notify | when typed | | nothing | | skill claude-sessions-overview | none |
-| 12 | my-setup · `tools/terminal_snapshot.py` | by hand (no caller found) | — | last run 2026-11-01 17:21 | `~/.local/state/terminal-snapshot/*_restore.sh` | yes | the user, after a reboot | 6 days |
-| 13 | my-setup · resurrect + continuum (added 2026-11-07) | tmux status redraw | 300 s | **2 saves in 30 min** (11:58:37, 12:18:37; expected 6); cause not found | `~/opt/my-setup/state/tmux/resurrect/` | yes | prefix + Ctrl-r | 20 min measured |
-| — | Claude Code itself · `~/.claude/sessions/<pid>.json` | Claude Code, on each busy/idle change | per change | 0 writes in 60 s while busy; file 252 s old | pid, sessionId, cwd, tmux `s:@w.%p`, status, updatedAt | **no**: removed or pid dead after a crash | asm close, cc-map, cc-rc, terminal_snapshot | none while it runs |
+| 1 | asm · lifecycle | hooks SessionStart, SessionEnd | per event | 0 writes in the 60 s sample | `~/opt/agent-session-manager/data/lifecycles/<uuid>.jsonl` (436 files) | yes | asm index, asm's duplicate check (UUID) | a crashed Claude session stays "pending" for ever (47 at the 11:12 crash) |
+| 2 | asm · index | SessionEnd + timer | 1800 s | 2 runs in 50 min | `data/indexes/<uuid>.json` | yes | `asm resume` (text, folder, UUID) | last_active 1085 s behind the transcript at 12:20 |
+| 3 | asm · close | read time | when typed | | nothing | | `asm close` | none |
+| 4 | notify · per-shell state | hooks SessionStart, UserPromptSubmit, PreToolUse, Stop, Notification, SessionEnd; tmux select-pane; refresh ≤ 300 s piggybacked | per event | state.env 83 s / 114 s old | `/tmp/agent-notify-$USER/<shell_pid>/{static,state}.env` | **no** | notify's renderers (shell PID), cc-map | none; no timestamps kept |
+| 5 | statusline · heartbeat | statusline tick | 10 s (`refreshInterval: 10`) + each message | 10 writes / 60 s, gaps 0.8–10.1 s | `~/opt/agent-statusline/state/heartbeat/{claude,codex}`: one time **per agent** | yes | usage quota job (agent type; age < 90 s) | ≤ 10 s |
+| 6 | usage · statusline payload | statusline tick | 10 s | 26 writes / 60 s | `data/claude/sessions_usages.db` | yes | its reports (UUID) | ≤ 10 s |
+| 7 | usage · OTel | pushed by Claude Code | seconds | always running | same db, telemetry | yes | aggregates | seconds |
+| 8 | usage · aggregates | timer | 300 s | 10 runs / 50 min | `data/claude/intermediary.db` | yes | 5-min slots → VM | ≤ 300 s |
+| 9 | usage · quota polls | timer | 60 s | 46 runs / 50 min | `account_quotas.db` | yes | statusline | 110–480 s, by design |
+| 10 | my-setup · Chrome kit hook | hooks Pre/PostToolUse, UserPromptSubmit, Stop, SubagentStop | per event | 2 writes / 60 s | `~/opt/my-setup/state/chrome/` | yes | the hook, agent-chrome (UUID + subagent) | none; tabs only |
+| 11 | my-setup · cc-map, cc-rc | read time | when typed | | nothing | | skill claude-sessions-overview (tmux pane → process tree → pid) | none |
+| 12 | my-setup · terminal_snapshot.py | by hand | — | last run 2026-11-01 | `~/.local/state/terminal-snapshot/*_restore.sh` | yes | the user (tmux pane → process tree → pid) | 6 days |
+| 13 | my-setup · resurrect + continuum (2026-11-07) | tmux redraw | 300 s | **2 saves in 30 min** | `~/opt/my-setup/state/tmux/resurrect/` | yes | Ctrl-b then Ctrl-r | 20 min; Claude panes come back empty |
+| — | Claude Code · `~/.claude/sessions/<pid>.json` | Claude Code, start / busy↔idle / exit | per change | 0 writes / 60 s while busy | pid, sessionId, cwd, tmux `s:@w.%p`, status, updatedAt, name, bridgeSessionId | **no**: 28 files at 12:48, all created after 11:31 | asm close, cc-map, cc-rc, terminal_snapshot | none while it runs |
+| — | Claude Code · transcript | each message | — | 3,014 files, 2.5 GB | every prompt and answer with its `timestamp`, a `last-prompt` entry, cwd; **no pane, no PID, no exit entry** (verified on 3 ended Claude sessions) | yes | asm reindex, usage aggregates | — |
 
-The same fact kept in several places (the overlap the user asked to remove):
+## 1. One writer of the facts nobody else keeps
 
-| Fact | Kept by |
-|---|---|
-| Claude session ↔ tmux pane | asm lifecycle (indexes `#S #I #P`), notify (`%pane`, `@window`), Claude Code (`tmux`), Chrome kit (`#S:#I`), terminal_snapshot, resurrect (none: only "claude") |
-| PID | asm lifecycle, notify (shell and agent), Claude Code |
-| start / end | asm lifecycle, notify (file created / deleted), Claude Code (file present / absent) |
-| busy / idle | notify (hooks), Claude Code `status` |
-| last activity | asm index (transcript, ≤ 30 min late), Claude Code `updatedAt`, usage-tracker (requests, telemetry), statusline (per agent only) |
-| alive? (`kill -0`) | asm (twice), notify, cc-map, cc-rc |
-| last prompt | **nobody** |
-| last seen per Claude session | **nobody** (the heartbeat is per agent) |
+**Choice:** agent-tracker writes only "where it runs" and "ended". Readers get everything else from its source: activity from the transcript, busy/idle from Claude Code's live file. Serves the goal in `AGENTS.md` ("no overlap").
 
-## 1. One writer, every other project a reader
+**Why:** "which Claude session is in which pane" is kept in 4 places today and 2 vanish in a crash; nothing keeps "last seen" per Claude session; the transcript already holds every prompt and answer with its time, so copying it would be a fifth overlap.
 
-**Choice:** agent-tracker is the only project that records Claude session facts; asm, notify, usage-tracker, cc-map and the crash restore read them through `agent-tracker now|open-at-crash --json`, never by keeping their own copy. Each keeps its own job: asm finds and resumes, notify colors panes, usage-tracker counts tokens.
+**Rejected:** keep each project's own tracking (§0: 13 streams, 4 "alive?" rules); an `activity.jsonl` written at every hook (§3: duplicates the transcript).
 
-**Why:** 13 mechanisms record overlapping facts today (§0); 4 of them decide "alive" each in their own way, so they can disagree, and none answers "last prompt" or "last seen per Claude session".
+## 2. Copy only with a reason
 
-**Rejected:** keep each project's own tracking (today) — the overlap above, and every new need (the crash restore) adds one more copy. Put the tracker inside asm — asm's job is finding and resuming past Claude sessions across machines; mixing live state into it is what made its index say "pending" for crashed sessions.
+| Fact | Claude Code's live file | Transcript | After a crash | agent-tracker keeps it? |
+|---|---|---|---|---|
+| UUID, pid, folder, tmux pane | yes | folder only | pane, pid gone | yes, `last_seen.json` |
+| last seen (while idle too) | updatedAt only on busy↔idle | no | gone | yes, `last_seen.json` ts |
+| ended normally | file deleted | no exit entry | can't tell from a crash | yes, `ended` |
+| prompt and answer times, last prompt, title | no | yes | kept | no: read from the transcript |
+| busy / idle, name, Remote Control | yes | — | gone (not needed then) | no: read live |
+| anything Codex | no such file | its own rollout files | — | yes, same two files |
 
-## 2. What triggers a write
+## 3. Last prompt / last active: computed when asked (option 3)
 
-**Choice:** hooks for events, the statusline tick for "last seen". Nothing runs on a timer.
+**Choice:** nothing is written for activity. `agent-tracker now` reads the end of each open Claude session's transcript; `asm resume` re-reads only the transcripts newer than their index entry, then searches as today.
 
-| Trigger | Fires | Writes | Rate per Claude session [verified unless marked] |
-|---|---|---|---|
-| hook SessionStart | start, resume, `/clear` | event `start` | 1 per start |
-| hook UserPromptSubmit | the user sends a message | event `prompt` (with `chars` and a ~200-character `excerpt`) | this session: 15 in 45 min, ≈ 1 every 3 min |
-| hook Stop | Claude finishes its turn | event `stop` | ≈ same as prompts |
-| hook Notification (idle, permission) | Claude waits for the user | event `waiting` | a few per hour [assumed] |
-| hook SessionEnd | `/exit`, Ctrl-D, closed terminal | event `end` | ≤ 1; **never on a crash** |
-| statusline tick | every 10 s, and on each message | `agent-tracker tick` (chained before the display) rewrites `last_seen.json` | ≤ 6 per minute, measured gaps 0.8–10.1 s |
+| Option | Writes | Work | Lag | Extra copy |
+|---|---|---|---|---|
+| 1 · append at every hook | each prompt + each stop, ≈ 40 / hour per active Claude session | one extra process per prompt and per stop (~5 ms each [assumed]) | 0 | yes, a copy of the transcript |
+| 2 · index every 5 min | 288 runs / day | each: dates of all transcripts (4 ms [verified]) + re-read the changed ones + ~50 ms Python start [assumed] | ≤ 5 min | yes, the index |
+| **3 · when asked (chosen)** | none | per question: dates 4 ms + the end of the changed transcripts; worst case all 3,014 (2.5 GB): 1.85 s [verified 2026-11-07] | 0 | none |
 
-Codex: the same events through its plugin hooks (asm and notify already use them: `src/codex-plugin/hooks/hooks.json`, `release/codex/hooks/hooks.json`) and the patched Codex statusline.
+**Why:** no work while nobody asks, no lag, nothing to keep in sync. It can also replace asm's 1800 s job, if the VM sync does not need it (open point).
 
-**Why:** an event is written when it happens (no lag), and only then (no work while nothing happens). A crash sends no `end`, which is exactly why "last seen" and `boot_ts` exist (§4).
-
-**Rejected:**
-
-| Option | Why it lost |
-|---|---|
-| A. no writer, computed at read time from `~/.claude/sessions/*.json` | those files vanish or go stale with a crash; no history, no last prompt, no Codex |
-| C. a daemon polling `ps` + tmux every N s | a process always running; up to N s late; misses short Claude sessions; still needs a hook for the prompt time |
-| D. one SQLite file written by every hook | every hook of every Claude session takes the same lock (10+ sessions × each prompt and tick); a hook must be fast and never fail; SQLite stays possible later as a read cache |
-| PreToolUse hook | fires on every tool call (dozens per minute when busy); nothing the user asked for needs it; notify keeps its own if it needs it (§6) |
-
-## 3. Files, and why there are no write collisions
-
-**Choice:** one folder per Claude session, one file per writer (the user's layout, 2026-11-07, with two renames). Every project writes only its own file, through an `agent-tracker` command, so the folder's format has one owner.
+## 4. Files, and why there are no write collisions
 
 ```text
 ~/opt/agent-tracker/data/<uuid>/
-  last_seen.json   written by `agent-tracker tick`, chained before the statusline by my-setup, every 10 s; rewritten whole (temp file + rename)
-                   {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","boot_ts":1794046382,"pid":4607,"pid_start":1794047610,
-                    "tmux_session":"jeanlescut","window_id":"@0","pane_id":"%0","pane":"jeanlescut:0.0",
-                    "cwd":"/Users/jeanlescut"}
-  activity.jsonl   written by agent-tracker's hook script; append-only, one line per event, each < 512 bytes
-                   {"ts":1794047617,"dt":"2026-11-07T10:33:37Z","event":"start","source":"startup","agent":"claude",
-                    "machine":"chan-lescut-macbook-pro","boot_ts":1794046382,"pid":4607,"pid_start":1794047610,
-                    "shell_pid":4328,"tmux_session":"jeanlescut","window_id":"@0","pane_id":"%0","cwd":"/Users/jeanlescut"}
-                   {"ts":1794047617,"dt":"2026-11-07T10:33:37Z","event":"prompt","chars":312,"excerpt":"I went to bed and…"}
-                   {"ts":1794047702,"dt":"2026-11-07T10:35:02Z","event":"stop"}
-  usage.jsonl      (open, §7) written by agent-usage-tracker: cost and quota data the transcript does not have
+  last_seen.json   written by `agent-tracker tick` every 10 s + each message; rewritten whole (temp file + rename)
+                   {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","agent":"claude","machine":"chan-lescut-macbook-pro",
+                    "boot_ts":1794046382,"pid":4607,"pid_start":1794047610,"tmux_session":"jeanlescut",
+                    "window_id":"@0","pane_id":"%0","pane":"jeanlescut:0.0","cwd":"/Users/jeanlescut",
+                    "transcript":"~/.claude/projects/-Users-jeanlescut/cbf1952e-….jsonl"}
+  ended            written once by `agent-tracker end` (SessionEnd hook): empty; its mtime = when the Claude session ended
 ```
-
-| The user's suggestion | Here | Why |
-|---|---|---|
-| `last_seen.json`, by the statusline, with tmux info | kept | the pane and folder stay fresh, so a crash loses ≤ 10 s; better than an empty "seen" file |
-| `index.json` (to rename): prompts and answers with their times | `activity.jsonl` | append-only lines never collide and survive a power cut; a JSON rewritten at each event could be cut in half; the full text stays in the transcript |
-| `extra_usage_infos.jsonl` | `usage.jsonl` | shorter; whether usage-tracker writes here or keeps its database is open (§7) |
-| `~/opt/agent-tracker/data/<uuid>/` | kept | all files of one Claude session together; archive or delete = one folder |
 
 | Who writes at the same time | Same file? | Why it is safe |
 |---|---|---|
 | two Claude sessions | no | one folder each |
-| two hooks of one Claude session (e.g. subagents) | yes, `activity.jsonl` | each event is one append of < 512 bytes with `O_APPEND` (`>>`): appended whole, lines never mixed [assumed, to test on APFS in step 2] |
-| statusline ticks | yes, `last_seen.json` | temp file + `rename`: a reader sees the old or the new file, never half; the last one wins, which is the right answer |
-| a reader during a write · a power cut mid-write | — | a line of `activity.jsonl` without its final newline is ignored; `last_seen.json` is never half-written |
+| two ticks of one Claude session | yes, `last_seen.json` | temp file + `rename`: a reader sees the old or the new file, never half; the last one wins, which is the right answer |
+| the SessionEnd hook | no | writes only `ended`, once |
+| a power cut mid-write | — | rename is all-or-nothing: the old `last_seen.json` stays |
 
-Today's shared heartbeat file (one per agent, written by every Claude session) is the only real collision: last writer wins, so it cannot say which Claude session is open. `last_seen.json` replaces it; the per-agent time is the newest `ts` among them.
+The user's layout (2026-11-07): `last_seen.json` kept as named; `index.json` / `activity.jsonl` dropped (the transcript has it); `usage.jsonl` waits for the scope (§8).
 
-## 3b. Copy only with a reason; how readers look things up; who owns the statusline call
+## 5. Reading, and lookups
 
-**Copy rule:** while a Claude session runs, read Claude Code's own `~/.claude/sessions/<pid>.json` (pid, UUID, cwd, tmux pane, status, updatedAt, name, bridgeSessionId). agent-tracker copies a fact only if a crash loses it or Claude Code never keeps it. [verified 2026-11-07 12:48: the 28 files there were all created after 11:31; none from before the 11:12 crash survived.]
+```text
+agent-tracker now   (cc-map, cc-rc, notify, terminal_snapshot, the user)
+  for each data/<uuid>/ of the current boot, without "ended":
+    alive?       pid running AND its start time == pid_start         # a reused PID does not count
+    where?       pane_id -> its place now (tmux list-panes)
+    busy/idle?   ~/.claude/sessions/<pid>.json (live)
+    last prompt  the end of the transcript (<= 256 KB): last "user" entry
 
-| Fact | Claude Code's file | After a crash | agent-tracker keeps it? |
-|---|---|---|---|
-| UUID, pid, cwd, tmux pane | yes | gone | yes, `last_seen.json` (the crash restore needs them) |
-| status, updatedAt, name, Remote Control | yes | gone | no: read live |
-| last prompt; start / end / resume history; boot | no | — | yes, `activity.jsonl` |
-| last seen | updatedAt only on busy↔idle | gone | yes, `last_seen.json` ts |
-| anything Codex | no such file | — | yes |
+agent-tracker open-at-crash   (the user, the restore, once after a crash)
+  prev_boot = the newest boot_ts that is not the current one
+  last_tick = the newest ts among prev_boot's folders                 # ~ the moment of the crash
+  each folder of prev_boot without "ended", with ts >= last_tick - 60 s   # killed ones stopped ticking earlier
+  one per pane_id: the newest ts wins                                  # the pane was reused
+```
 
-**Lookups:** every hook and the statusline receive the UUID from Claude Code on stdin, so most readers open `data/<uuid>/` directly. Readers that start from a tmux pane (cc-map, cc-rc, terminal_snapshot) use `agent-tracker now --pane <%id>`, which reads the `last_seen.json` of the current boot's folders (~30) [assumed cheap; measure in step 2]. No index file by pane or PID is kept: it would be a second copy to keep in sync.
+Every hook and the statusline receive the UUID from Claude Code on stdin, so they open `data/<uuid>/` directly. Readers that start from a tmux pane use `now --pane <%id>`, which reads the current boot's folders (~30) [assumed cheap; measure in step 2]. No index by pane or PID: one more copy to keep in sync.
 
 | Reader | Starts from | Today | New |
 |---|---|---|---|
-| asm resume | text, folder or UUID | scans `indexes/*.json` | same for text; state and last prompt from `data/<uuid>/` |
+| asm resume | text, folder or UUID | scans `indexes/*.json` (up to 30 min old) | refreshes changed entries, then scans |
 | asm close | a picked Claude session | `~/.claude/sessions/*.json` → pid | unchanged (live) |
-| asm duplicate check | UUID | `lifecycles/<uuid>.jsonl` | `data/<uuid>/activity.jsonl` |
-| notify hooks | shell PID | `/tmp/agent-notify-$USER/<shell_pid>/` | UUID from hook stdin → `data/<uuid>/last_seen.json` |
-| cc-map, cc-rc | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | unchanged for live data; `now --pane` for last prompt |
-| terminal_snapshot | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | `agent-tracker now` / `open-at-crash` |
-| usage quota job | agent type | `heartbeat/claude` age | newest `ts` among `data/*/last_seen.json` |
+| asm duplicate check | UUID | `lifecycles/<uuid>.jsonl` → old pids | `data/<uuid>/last_seen.json` → pid alive? |
+| notify hooks | shell PID | `/tmp/agent-notify-$USER/<shell_pid>/` | UUID (hook) → `data/<uuid>/last_seen.json` → pane |
+| cc-map, cc-rc | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | `now --pane` |
+| terminal_snapshot | tmux pane | pane → process tree → `~/.claude/sessions/<pid>.json` | `now` |
+| usage quota job | agent type | `heartbeat/claude` age | newest ts among `data/*/last_seen.json` |
+| usage payload, Chrome kit | UUID | their own stores | unchanged |
 
-**Who owns the statusline call:** Claude Code runs one `statusLine` command; that key is owned by my-setup (`modules/claude_config.sh`, skill config-ownership) and points to agent-statusline's script. **Choice:** my-setup chains `agent-tracker tick | bash ~/.claude/statusline-command.sh` when agent-tracker is installed, the display alone otherwise. `tick` reads the JSON from stdin, writes `last_seen.json` in the background, and copies stdin to stdout unchanged. **Why:** agent-statusline holds no tracking code, so reinstalling it on a VM, or rewriting the display, cannot drop the tracking. **Rejected:** a line inside agent-statusline's script (a display rewrite can drop it silently); agent-tracker owning `statusLine` (two projects fighting over one key, last install wins).
+## 6. Who owns the statusline call
+
+Claude Code runs one `statusLine` command; the key is owned by my-setup (`modules/claude_config.sh`, skill config-ownership) and points to agent-statusline's script.
+
+**Choice:** my-setup writes `agent-tracker tick | bash ~/.claude/statusline-command.sh` when agent-tracker is installed, the display alone otherwise. `tick` reads the JSON from stdin, writes `last_seen.json` in the background, and copies stdin to stdout unchanged.
+
+**Why:** agent-statusline holds no tracking code, so reinstalling it on a VM, or rewriting the display, cannot drop the tracking.
+
+**Rejected:** a line inside agent-statusline's script (a display rewrite can drop it silently); agent-tracker owning `statusLine` (two projects fighting over one key, last install wins).
 
 | New VM gets | Display | Tracking |
 |---|---|---|
@@ -146,88 +131,53 @@ Today's shared heartbeat file (one per agent, written by every Claude session) i
 | + agent-tracker | yes | yes: my-setup chains both |
 | agent-statusline reinstalled later | yes | yes: the chain lives in my-setup's setting |
 
-## 4. Reading: computed at read time, never stored twice
-
-**Choice:** `now` and `open-at-crash` are computed from the files when asked.
-
-```text
-now:
-  for each data/<uuid>/ whose activity.jsonl's last event is not "end":
-    alive = pid running AND its start time == pid_start      # a reused PID does not count
-    if alive: row(uuid, tmux pane %id -> current "<session>:<window>.<pane>", cwd, status, last prompt, last seen (last_seen.json ts))
-
-open-at-crash:
-  prev_boot = the boot_ts before the current kern.boottime (from the events themselves)
-  for each Claude session with events in prev_boot:
-    skip if its last event is "end"
-    skip if a later "start" in prev_boot took the same pane_id    # the pane was reused
-    row(uuid, pane, cwd, last prompt, last seen)
-```
-
-Worked example (the 2026-11-07 crash, from asm's lifecycle files): 47 Claude sessions "never ended" since 2026-10; with `boot_ts`, only those started after the previous boot count, and two starts in `job-applications:0.0` keep only the later one.
-
-| Reader | Reads | How often | Cost per read |
-|---|---|---|---|
-| notify (pane colors) | the one Claude session of its pane | on each of its hooks | 1 small file |
-| usage-tracker quota polls | the newest `ts` among `*/last_seen.json` | 60 s | one small file per Claude session of the current boot |
-| asm resume, cc-map, cc-rc | `now` | when typed | the files of the current boot: ~10–50 files < 10 KB each [assumed] |
-| the crash restore | `open-at-crash` | once after a crash | same |
-
-Old folders: a `<uuid>/` whose newest file is older than 30 days moves to `data/old/` (read only by `--all`) [proposal].
-
-## 5. What each project deletes, and keeps
+## 7. What each project deletes, and keeps; the crash restore
 
 | Project | Deletes | Keeps |
 |---|---|---|
-| asm | its SessionStart/SessionEnd hooks and `data/lifecycles/`; `session_state` and `last_active` come from the tracker | search, index of conversations, sync across machines, resume, close |
-| notify | its own bookkeeping of shell PID, agent PID, pane, Claude session, cwd (static.env) | its state machine and colors; its hooks only where a color must change at once (it may call the tracker's file instead of `ps`) |
-| statusline | the per-agent heartbeat (derived from `*/last_seen.json`) | the display; no tracking code: my-setup's `statusLine` setting chains `agent-tracker tick | bash statusline-command.sh` (§3b) |
-| usage-tracker | reading the heartbeat file | everything else (tokens, quotas) |
-| my-setup | cc-map/cc-rc reading `~/.claude/sessions` and notify; one of the two crash restores (§6) | the Chrome kit (it tracks tabs, not Claude sessions) |
+| asm | its SessionStart/SessionEnd hooks and `data/lifecycles/`; `session_state` (→ `ended`); maybe its 1800 s job (→ refresh at search time) | search, index of conversations, VM sync, resume, close |
+| notify | its `/tmp` copy of shell PID, agent PID, pane, UUID, cwd | its states and colors, its own hooks |
+| statusline | the per-agent heartbeat (→ newest `last_seen.json` ts) | the display, with no tracking code |
+| usage-tracker | reading the heartbeat | everything else |
+| my-setup | cc-map/cc-rc's process-tree walk; one of the two crash restores | the Chrome kit; the `statusLine` chain (§6) |
 
-## 6. The crash restore: one tool, not two
+Two crash restores exist: `tools/terminal_snapshot.py` (2026-11-01: tmux + iTerm2 tabs + `claude --resume <id>`, by hand) and resurrect + continuum (2026-11-07: tmux only, Claude panes empty, 2 saves in 30 min instead of 6). **Proposal (the user decides):** keep terminal_snapshot, run it from `tick` at most every 5 min, feed it `agent-tracker now`, and remove resurrect + continuum.
 
-Today there are two: `tools/terminal_snapshot.py` (2026-11-01: tmux + iTerm2 tabs + `claude --resume <id>` per pane, run by hand) and resurrect + continuum (2026-11-07: tmux only, a Claude pane comes back as an empty shell, and it saved 2 times in 30 min instead of 6).
-
-**Choice (proposal, the user decides):** keep `terminal_snapshot.py`, feed it `agent-tracker open-at-crash` instead of `~/.claude/sessions`, run it from a tracker event (`start`, `end`) instead of by hand, and remove resurrect + continuum.
-
-**Why:** it already restores iTerm2 windows and Claude sessions, which resurrect cannot; written on events, it is never 20 min late.
-
-**Rejected:** resurrect for the layout + a script for Claude — two tools for one restore, and continuum's measured saves are unreliable.
-
-## 7. Scope: what agent-tracker owns, and what may stay apart (open, the user, 2026-11-07)
+## 8. Scope: what agent-tracker owns, and what may stay apart (open, the user, 2026-11-07)
 
 | Data | In agent-tracker? | If it stays apart | For joining | For staying apart |
 |---|---|---|---|---|
-| session facts: pane, start, end, last prompt, last seen | yes, the core | — | copied 4 times today | — |
-| asm's search index (title, text) | open | asm, reading the facts from agent-tracker | one place for everything about a Claude session | about the conversation's content; synced to the VM; rebuilt from transcripts |
-| tokens, cost, quotas (`usage.jsonl`) | open | agent-usage-tracker's SQLite, as today | the per-session part sits with the rest | a different question (cost); its own triggers (OTel, polls); aggregates 80k+ rows |
+| where it runs, ended, last seen | yes, the core | — | copied 4 times today | — |
+| asm's search index (title, text) | open | asm, refreshed at search time | one place for everything about a Claude session | about the conversation's content; synced to the VM; rebuilt from transcripts |
+| tokens, cost, quotas | open | agent-usage-tracker, as today | its per-session part would sit with the rest | a different question (cost); its own triggers (OTel, polls); 80k+ rows in SQLite |
 | pane colors | no | notify | | display, not tracking |
 | Chrome tabs | no | my-setup's Chrome kit | | tabs, not Claude sessions |
 
-Whatever is decided, the session facts have one writer; everything else reads them.
-
-## 8. Steps
+## 9. Steps
 
 | # | Step | Touches | Done when |
 |---|---|---|---|
-| 1 | this design, reviewed by the user | agent-tracker | the user says yes |
-| 2 | build the writer (hooks + statusline line) beside today's mechanisms, nothing removed | agent-tracker, statusline (1 line) | a `data/<uuid>/` folder with `last_seen.json` and `activity.jsonl` for every Claude session, for 2 days |
-| 3 | `now` and `open-at-crash`; the crash restore on top (§6) | agent-tracker, my-setup | a test tmux killed and restored gets its Claude sessions back |
-| 4 | asm reads the tracker; its hooks and lifecycles removed | asm | `asm resume --state pending` gives the same list |
-| 5 | notify, then cc-map/cc-rc, then usage-tracker read it; their copies removed | each repo | each one's tests pass |
+| 1 | this design, reviewed; scope and restore decided | agent-tracker | the user says yes |
+| 2 | `tick` + `end` + my-setup's chain, beside today's streams; nothing removed | agent-tracker, my-setup | a `data/<uuid>/` folder for every Claude session, for 2 days |
+| 3 | `now`, `open-at-crash`; terminal_snapshot on top | agent-tracker, my-setup | a killed test tmux gets its Claude sessions back |
+| 4 | asm: index refreshed at search time; lifecycle (and maybe the 1800 s job) removed | asm | `asm resume --state pending` gives the same list, with no lag |
+| 5 | notify, cc-map/cc-rc, usage quota job read it; their copies removed | each repo | each one's tests pass |
 
 ## Acceptance
 
 - After a crash, `agent-tracker open-at-crash` lists exactly the Claude sessions that were open, with their pane, and nothing from older boots.
-- `now` agrees with `~/.claude/sessions/*.json` for every live Claude session (same pane, same status).
-- Each removal in §5 leaves no second copy of a fact in §0's overlap table.
+- `now` agrees with `~/.claude/sessions/*.json` for every live Claude session (same pane, same status), and its last prompt matches the transcript.
+- No fact of §2 is stored in two places.
 
 ## Open points
 
-- Continuum saved 2 times in 30 min instead of 6: not investigated (moot if §6 removes it).
-- Whether notify needs PreToolUse at all once it reads the tracker (its "Working" after a permission prompt).
-- Codex statusline tick interval: not measured (no Codex session today).
-- The VM: same tracker there, per machine; asm's sync carries what crosses machines.
-- Whether a single small append to a local file is ever split on APFS: to test before relying on it (step 2).
-- Whether Claude Code keeps running the statusline when its pane is not on screen (another tmux window): decides whether `last_seen.json` means "open" or "on screen"; to test in step 2.
+- Does Claude Code run the statusline while its pane is hidden (another tmux window)? Decides whether last seen means "open" or "on screen", and the 60 s rule of `open-at-crash`; test in step 2.
+- Does the VM sync still need asm's 1800 s job?
+- Codex: statusline interval and SessionEnd hook, not measured (no Codex session today).
+- Why continuum saved 2 times in 30 min instead of 6: moot if it is removed.
+
+## Superseded decisions
+
+- 2026-11-07: `events/<uuid>.jsonl` written at 5 hooks → replaced by §3 (computed when asked): the transcript already has every prompt and answer with its time.
+- 2026-11-07: `state/events/` + `state/seen/` by kind → replaced by one folder per Claude session (the user's layout).
+- 2026-11-07: a `touch` inside agent-statusline's script → replaced by §6 (my-setup chains `tick` before the display).
