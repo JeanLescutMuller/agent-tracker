@@ -605,7 +605,7 @@ def cmd_check() -> int:
                               "its statusline stopped calling agent-tracker tick")
     d_settings = read_json(CLAUDE_DIR / "settings.json") or {}
     command = ((d_settings.get("statusLine") or {}).get("command") or "").strip()
-    if not re.match(r"(\S*/)?agent-tracker tick(\s|$)", command):
+    if not re.match(r"\(?\s*(\S*/)?agent-tracker tick(\s|$|\))", command):   # plain, or my-setup's "(agent-tracker tick 2>/dev/null || cat) | …"
         l_problems.append(f"statusLine in {CLAUDE_DIR / 'settings.json'} does not start with `agent-tracker tick`: "
                           f"{command or '(none)'}")
     for event, word in (("SessionStart", "start"), ("SessionEnd", "end")):
