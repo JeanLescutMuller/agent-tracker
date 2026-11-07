@@ -421,6 +421,13 @@ def write_last_seen(d_payload: dict, agent: str) -> bool:
              "transcript": d_payload.get("transcript_path")}
     path = SESSIONS_DIR / uuid / "last_seen.json"
     d_old = read_json(path)
+    # tmux gone (its server killed, 2026-11-07 15:30) but this process still ticks: keep the last known
+    # pane, window and layout instead of overwriting them with nulls; they are what a restore needs.
+    l_tmux_keys = ("tmux_session", "window_id", "window_index", "window_name", "pane_id", "pane_index", "pane",
+                   "window_layout")
+    if os.environ.get("TMUX_PANE") and d_new["pane_id"] is None and isinstance(d_old, dict) \
+            and d_old.get("pid") == pid and d_old.get("pane_id"):
+        d_new.update({k: d_old.get(k) for k in l_tmux_keys})
     if isinstance(d_old, dict) and isinstance(d_old.get("ts"), int) and now - d_old["ts"] < REWRITE_AFTER_S \
             and {k: v for k, v in d_old.items() if k not in ("ts", "dt")} == \
             {k: v for k, v in d_new.items() if k not in ("ts", "dt")}:
@@ -469,12 +476,25 @@ def last_prompt(transcript) -> dict | None:
     if not transcript:
         return None
     try:
-        with open(transcript, "rb") as f:
-            f.seek(0, 2)
-            f.seek(max(0, f.tell() - TAIL_BYTES))
-            data = f.read()
+        size = os.path.getsize(transcript)
     except OSError:
         return None
+    window = TAIL_BYTES
+    while True:   # the end first, then 4x more, up to the whole file: a long tool-only stretch hides the prompt
+        try:
+            with open(transcript, "rb") as f:
+                f.seek(max(0, size - window))
+                data = f.read(min(window, size))
+        except OSError:
+            return None
+        d_found = _last_prompt_in(data)
+        if d_found or window >= size:
+            return d_found
+        window *= 4
+
+
+def _last_prompt_in(data: bytes) -> dict | None:
+    """last_prompt's search in one block of transcript lines (a cut first line simply fails to parse)."""
     from datetime import datetime
     for line in reversed(data.splitlines()):
         if b'"user"' not in line:
@@ -483,14 +503,15 @@ def last_prompt(transcript) -> dict | None:
             d_entry = json.loads(line)
         except ValueError:
             continue
-        if not isinstance(d_entry, dict) or d_entry.get("type") != "user" or d_entry.get("isMeta"):
+        if not isinstance(d_entry, dict) or d_entry.get("type") != "user" or d_entry.get("isMeta") \
+                or d_entry.get("isCompactSummary"):
             continue
         content = (d_entry.get("message") or {}).get("content")
         if isinstance(content, list):
             if any(isinstance(x, dict) and x.get("type") == "tool_result" for x in content):
                 continue
             content = " ".join(x.get("text", "") for x in content if isinstance(x, dict) and x.get("type") == "text")
-        if not isinstance(content, str):
+        if not isinstance(content, str) or content.lstrip().startswith(("<task-notification>", "<system-reminder>")):
             continue
         try:
             ts = int(datetime.fromisoformat(str(d_entry.get("timestamp")).replace("Z", "+00:00")).timestamp())
@@ -595,8 +616,8 @@ def cmd_check() -> int:
             continue
         if not any(e.get("event") == "start" for e in lifecycle_events(folder)):
             l_problems.append(f"no start line in data/sessions/{uuid}/lifecycle.jsonl ({where}): SessionStart hook missing")
-        if d_live.get("kind", "interactive") != "interactive":   # claude -p has no statusline
-            continue
+        if d_live.get("kind", "interactive") != "interactive" or d_live.get("entrypoint", "cli") != "cli":
+            continue   # claude -p, or an SDK process (entrypoint sdk-cli: the Remote Control bridge): no statusline
         d_seen = read_json(folder / "last_seen.json")
         if not isinstance(d_seen, dict) or not isinstance(d_seen.get("ts"), int):
             l_problems.append(f"no last_seen.json for open Claude session {uuid} ({where}): statusLine not chained")
