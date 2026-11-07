@@ -16,4 +16,5 @@ Goal, in the user's words (2026-11-07): one project that knows "what is running 
 | open at crash | a Claude session whose last lifecycle event is a start in the previous boot, still ticking at the crash (computed by `asm resume-tmux`, not by agent-tracker) | |
 | Claude session folder | `~/opt/agent-tracker/data/sessions/<uuid>/`: `last_seen.json` (where, by the statusline) and `lifecycle.jsonl` (start, resume, end, by hooks) | |
 | on call | computed when a command runs, from its source, never stored (option 3); who runs each command and how often: `DESIGN.md` §5b | when asked |
+| agent-tracker · agent-resume · agent-auto-close · agent-notify | the four projects of the new design: records + visibility (was agent-usage-tracker) · search and resume, command `ares` (was asm) · closing Claude sessions (was `asm close`) · pane colors | asm, usage-tracker, notify (except when describing today) |
 | writer · reader | the one project that writes the tracker's files · every other project, which only reads them | |
