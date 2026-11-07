@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Tracking Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#f6f7fb; --panel:#ffffff; --ink:#1b1f2e; --muted:#5d6479; --line:#dfe3ee;
+  --asm:#7c3aed; --asm-bg:#efe7ff;
+  --cc:#475569; --cc-bg:#e9edf3;
+  --ntf:#2563eb; --ntf-bg:#e7efff;
+  --stl:#c27c0e; --stl-bg:#fff4dc;
+  --use:#d03a4a; --use-bg:#fde8ea;
+  --mys:#0e7490; --mys-bg:#dff4f8;
+  --trk:#0f8a5f; --trk-bg:#e1f6ec;
+  --aac:#a21caf; --aac-bg:#fae8ff;
+  --ok:#0f8a5f; --bad:#d03a4a; --warn:#c27c0e;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11131c; --panel:#1a1d29; --ink:#e8eaf3; --muted:#9aa1b8; --line:#2c3142;
+  --asm:#b393ff; --asm-bg:#2a1f47; --cc:#a8b3c7; --cc-bg:#252b38; --ntf:#7aa7ff; --ntf-bg:#1b2747;
+  --stl:#f0b44c; --stl-bg:#3a2c12; --use:#ff7d8a; --use-bg:#41191f; --mys:#5ed3ea; --mys-bg:#0f3540;
+  --trk:#4fd39d; --trk-bg:#123628; --aac:#e879f9; --aac-bg:#3b1240; --ok:#4fd39d; --bad:#ff7d8a; --warn:#f0b44c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11131c; --panel:#1a1d29; --ink:#e8eaf3; --muted:#9aa1b8; --line:#2c3142;
+  --asm:#b393ff; --asm-bg:#2a1f47; --cc:#a8b3c7; --cc-bg:#252b38; --ntf:#7aa7ff; --ntf-bg:#1b2747;
+  --stl:#f0b44c; --stl-bg:#3a2c12; --use:#ff7d8a; --use-bg:#41191f; --mys:#5ed3ea; --mys-bg:#0f3540;
+  --trk:#4fd39d; --trk-bg:#123628; --aac:#e879f9; --aac-bg:#3b1240; --ok:#4fd39d; --bad:#ff7d8a; --warn:#f0b44c; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 16px 70px;display:grid;gap:42px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,4.4vw,44px);font-weight:800;letter-spacing:-.02em}
+h2{font-size:24px;font-weight:800}
+h3{font-size:16.5px;font-weight:700}
+p{margin:0}
+.lede{color:var(--muted);max-width:82ch}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+section{display:grid;gap:14px}
+code,.mono{font-family:var(--mono);font-size:12.5px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:13px}
+.sw{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.sw i{width:14px;height:14px;border-radius:4px;display:inline-block;border:2px solid currentColor}
+.p-asm{color:var(--asm)} .p-asm i{background:var(--asm-bg)}
+.p-cc{color:var(--cc)} .p-cc i{background:var(--cc-bg)}
+.p-ntf{color:var(--ntf)} .p-ntf i{background:var(--ntf-bg)}
+.p-stl{color:var(--stl)} .p-stl i{background:var(--stl-bg)}
+.p-use{color:var(--use)} .p-use i{background:var(--use-bg)}
+.p-mys{color:var(--mys)} .p-mys i{background:var(--mys-bg)}
+.p-trk{color:var(--trk)} .p-trk i{background:var(--trk-bg)}
+.p-aac{color:var(--aac)} .p-aac i{background:var(--aac-bg)}
+.trig{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:1px 7px;border-radius:999px;border:1.5px solid var(--muted);color:var(--ink);background:var(--panel);margin:2px 3px 0 0;white-space:nowrap}
+.trig.bad{border-color:var(--bad);color:var(--bad)}
+.trig.good{border-color:var(--ok);color:var(--ok)}
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:10px}
+.cols-head{display:grid;grid-template-columns:minmax(220px,1fr) 30px minmax(330px,1.55fr) 30px minmax(280px,1.3fr);font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.cols-head span:nth-child(2),.cols-head span:nth-child(4){visibility:hidden}
+.row{display:grid;grid-template-columns:minmax(220px,1fr) 30px minmax(330px,1.55fr) 30px minmax(280px,1.3fr);align-items:stretch}
+.arrow{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:20px;font-weight:700}
+.w,.f,.r{border-radius:9px;padding:9px 11px;border:1.5px solid var(--line);background:var(--panel);display:grid;gap:4px;align-content:start;min-width:0}
+.w{border-left-width:6px}
+.w .who{font-family:var(--display);font-weight:800;font-size:15px}
+.w .stream{font-family:var(--mono);font-size:12px;font-weight:600}
+.w .note,.f .note{font-size:12.5px;color:var(--muted)}
+.f .path{font-family:var(--mono);font-size:12px;font-weight:600;word-break:break-all}
+.f pre{margin:0;font-family:var(--mono);font-size:11.3px;line-height:1.45;white-space:pre-wrap;word-break:break-all;background:color-mix(in srgb,var(--line) 30%,transparent);border-radius:6px;padding:6px 8px}
+.r{gap:6px}
+.rd{border-left:4px solid var(--line);padding:2px 0 2px 8px;font-size:12.8px;line-height:1.4}
+.rd .when{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.c-asm{border-left-color:var(--asm)} .c-asm .who{color:var(--asm)} .bg-asm{background:var(--asm-bg)}
+.c-cc{border-left-color:var(--cc)} .c-cc .who{color:var(--cc)} .bg-cc{background:var(--cc-bg)}
+.c-ntf{border-left-color:var(--ntf)} .c-ntf .who{color:var(--ntf)} .bg-ntf{background:var(--ntf-bg)}
+.c-stl{border-left-color:var(--stl)} .c-stl .who{color:var(--stl)} .bg-stl{background:var(--stl-bg)}
+.c-use{border-left-color:var(--use)} .c-use .who{color:var(--use)} .bg-use{background:var(--use-bg)}
+.c-mys{border-left-color:var(--mys)} .c-mys .who{color:var(--mys)} .bg-mys{background:var(--mys-bg)}
+.c-trk{border-left-color:var(--trk)} .c-trk .who{color:var(--trk)} .bg-trk{background:var(--trk-bg)}
+.c-aac{border-left-color:var(--aac)} .c-aac .who{color:var(--aac)} .bg-aac{background:var(--aac-bg)}
+.gone{opacity:.6;border-style:dashed}
+.gone .who::after{content:"  removed";font-family:var(--mono);font-size:10.5px;color:var(--bad);letter-spacing:.06em}
+.sep{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding-top:8px;border-top:1px dashed var(--line)}
+.gonegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+@media (max-width:860px){.cols-head{display:none}.row{grid-template-columns:1fr}.arrow{transform:rotate(90deg);height:24px}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.kpi b{font-family:var(--display);font-size:30px;font-weight:800;line-height:1.1}
+.kpi span{color:var(--muted);font-size:13.5px}
+.kpi.bad b{color:var(--bad)} .kpi.warn b{color:var(--warn)} .kpi.good b{color:var(--ok)}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-top:1px solid var(--line)}
+thead th{border-top:0;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:color-mix(in srgb,var(--line) 35%,transparent);white-space:nowrap}
+td.n{font-family:var(--mono);color:var(--muted)}
+td.proj{font-weight:700;white-space:nowrap}
+tr.win td{background:color-mix(in srgb,var(--ok) 9%,transparent)}
+.good{color:var(--ok);font-weight:700} .no{color:var(--bad);font-weight:700} .meh{color:var(--warn);font-weight:700}
+pre.block{margin:0;font-family:var(--mono);font-size:12.3px;line-height:1.55;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto}
+.k{color:var(--trk);font-weight:700}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+.opt{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:8px;padding:12px 14px;display:grid;gap:4px}
+.opt.win{border-left-color:var(--ok)} .opt.lose{border-left-color:var(--bad)}
+.opt b{font-family:var(--display);font-size:15.5px}
+.opt span{color:var(--muted);font-size:13.5px}
+.ask{background:var(--stl-bg);border:1.5px solid var(--stl);border-radius:10px;padding:12px 16px;display:grid;gap:6px}
+footer{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header style="display:grid;gap:10px">
+  <div class="eyebrow">agent-tracker · design · 2026-11-07 · proposal, nothing built</div>
+  <h1>Who writes what about your Claude sessions, and who reads it</h1>
+  <p class="lede">Diagram 1 is your MacBook <b>today</b>, measured on 2026-11-07 (11:31 login → 12:48). Diagram 2 is the <b>new design</b>: two small files per Claude session (<code>last_seen.json</code>, <code>lifecycle.jsonl</code>), and everything else <b>computed when someone asks</b> (option 3, chosen 2026-11-07). <b>Use cases</b>, right after diagram 2, say who asks, how it is triggered and how often (measured). In both, each row is one writing stream: <b>who writes</b> (project · stream · trigger) → <b>what exactly is written</b> (file + example) → <b>who reads it, when, and which fields</b>. Text version for agents: <code>/Users/jeanlescut/dev/agent-tracker/DESIGN.md</code>.</p>
+  <div class="legend">
+    <span class="sw p-asm"><i></i>asm → agent-resume</span><span class="sw p-cc"><i></i>Claude Code itself</span><span class="sw p-ntf"><i></i>agent-notify</span><span class="sw p-stl"><i></i>agent-statusline</span><span class="sw p-use"><i></i>agent-usage-tracker → agent-tracker</span><span class="sw p-mys"><i></i>my-setup</span><span class="sw p-trk"><i></i>agent-tracker</span><span class="sw p-aac"><i></i>agent-auto-close (new)</span>
+  </div>
+  <div class="legend"><b>Triggers:</b>
+    <span class="trig">⚡ hook</span> Claude runs it on an event ·
+    <span class="trig">⏲ statusline tick</span> every 10 s + each message ·
+    <span class="trig">⏱ timer</span> launchd or tmux ·
+    <span class="trig">✉ Claude Code</span> writes or pushes it itself ·
+    <span class="trig">✋ by hand</span> ·
+    <span class="trig good">🔍 on call</span> computed when the command runs, nothing stored; who calls it and how often: "Use cases"
+  </div>
+  <div class="ask" style="background:var(--trk-bg);border-color:var(--trk)"><b>What agent-tracker is (you, 2026-11-07):</b> a <b>foundational layer</b>. It makes sure the data about Claude sessions is recorded and present; it provides <b>no feature</b>. Features (finding, resuming, restoring after a crash, pane colors, quotas) live in the projects that use the data and read its files directly. Its only feature is <b>visibility</b>: <code>agent-tracker now</code> (what runs where) and <code>agent-tracker check</code> (is every writer actually writing?). <b>It is agent-usage-tracker, grown and renamed</b> (you, 2026-11-07): usage and quota data stay exactly as they are, the session files are added beside them.</div>
+</header>
+
+<!-- ========================= DIAGRAM 1: TODAY ========================= -->
+<section>
+  <div class="eyebrow">Diagram 1 · today</div>
+  <h2>15 writing streams: 4 projects + Claude Code</h2>
+  <div class="diagram">
+    <div class="cols-head"><span>Who writes · trigger</span><span></span><span>What is written · real example</span><span></span><span>Who reads · when · which fields</span></div>
+
+    <div class="sep">Claude Code itself (the source for everyone)</div>
+    <div class="row">
+      <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">live session file</div><div><span class="trig">✉ at start, each busy↔idle, deleted at exit</span></div><div class="note">measured: 0 writes in 60 s while busy</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/.claude/sessions/&lt;pid&gt;.json</div><pre>{"pid": 4607, "sessionId": "cbf1952e-…",
+ "cwd": "/Users/jeanlescut",
+ "tmux": "jeanlescut:@0.%0",
+ "status": "busy", "updatedAt": 1794049…,
+ "bridgeSessionId": "…"}</pre><div class="note">one per running Claude session · <b class="no">all gone after the crash</b> (28 files at 12:48, all created after 11:31)</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>asm close</b> <span class="when">by hand</span><br>pid, status, tmux</div><div class="rd c-mys"><b>cc-map, cc-rc</b> (my-setup, 2026-10-17: prints each tmux session with its Claude sessions, state icon and 📱 Remote Control, for the phone; cc-rc turns /rc on. Run by an agent via skill claude-sessions-overview) <span class="when">by hand</span><br>status, updatedAt, bridgeSessionId (= Remote Control on)</div><div class="rd c-mys"><b>terminal_snapshot</b> <span class="when">by hand</span><br>pid → sessionId, cwd</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">transcript</div><div><span class="trig">✉ each message</span></div><div class="note">3,014 files, 2.5 GB</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/.claude/projects/&lt;folder&gt;/&lt;uuid&gt;.jsonl</div><pre>{"type": "user", "timestamp": "2026-11-07T11:18:45Z",
+ "message": {…}, "sessionId": "cbf1952e-…", "cwd": "…"}
+{"type": "last-prompt", …}   {"type": "assistant", …}</pre><div class="note">every prompt and answer with its time · survives a crash · <b>no pane, no PID, no exit entry</b></div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>asm reindex</b> <span class="when">every 1800 s + at exit</span><br>timestamps, title, text</div><div class="rd c-use"><b>usage aggregates</b> <span class="when">every 300 s</span><br>token usage per request</div></div>
+    </div>
+
+    <div class="sep">agent-session-manager (asm)</div>
+    <div class="row">
+      <div class="w c-asm bg-asm"><div class="who">asm</div><div class="stream">lifecycle</div><div><span class="trig">⚡ SessionStart</span><span class="trig">⚡ SessionEnd</span></div><div class="note">1 line per start, resume, exit · never on a crash</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-session-manager/data/lifecycles/&lt;uuid&gt;.jsonl</div><pre>{"event": "start", "timestamp": "2026-11-07T10:55:36Z",
+ "session_id": "d6d2c8bb-…", "hostname": "chan-lescut-macbook-pro",
+ "working_dir": "/Users/jeanlescut/dev/agent-session-manager",
+ "tmux_session": "agent-session-manager",
+ "tmux_window": "0", "tmux_pane": "0", "pid": 387…}</pre><div class="note">436 files · 47 "never ended" at the 11:12 crash</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>asm duplicate check</b> <span class="when">at each SessionStart</span><br>pid of earlier starts: still alive?</div><div class="rd c-asm"><b>asm reindex</b> <span class="when">every 1800 s</span><br>last event → "pending" / "exited"</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-asm bg-asm"><div class="who">asm</div><div class="stream">reindex</div><div><span class="trig">⏱ every 1800 s</span><span class="trig">⚡ SessionEnd</span></div><div class="note">reads transcripts + lifecycles · measured 2 runs in 50 min</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-session-manager/data/indexes/&lt;uuid&gt;.json</div><pre>{"session_id": "cbf1952e-…",
+ "custom_title": "Laptop shutdown and remote control",
+ "created_at": "2026-11-07T10:33:37Z",
+ "last_active": "2026-11-07T11:24:20Z",
+ "session_state": "pending", "latest_working_dir": "…", …}</pre><div class="note">synced to the VM · <b class="meh">last_active up to 30 min late</b> (1085 s at 12:20)</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>asm resume</b> <span class="when">by hand</span><br>title, last_active, session_state, folder, text (search)</div><div class="rd c-asm"><b>asm-sync → VM</b> <span class="when">at each exit</span><br>the whole file</div></div>
+    </div>
+
+    <div class="sep">agent-notify</div>
+    <div class="row">
+      <div class="w c-ntf bg-ntf"><div class="who">notify</div><div class="stream">per-shell state</div><div><span class="trig">⚡ SessionStart</span><span class="trig">⚡ UserPromptSubmit</span><span class="trig">⚡ PreToolUse (each tool call)</span><span class="trig">⚡ Stop</span><span class="trig">⚡ Notification</span><span class="trig">⚡ SessionEnd</span><span class="trig">tmux select-pane</span></div><div class="note">+ a refresh ≤ every 300 s, only when another notify call happens</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">/tmp/agent-notify-jeanlescut/&lt;shell_pid&gt;/static.env · state.env</div><pre>static.env: SHELL_PID=4328  AGENT_PID=4607
+  AGENT_SESSION_ID=cbf1952e-…  AGENT_WD=/Users/jeanlescut
+  SESSION_TMUX_PANE=%0  SESSION_TMUX_WINDOW=@0
+state.env:  AGENT_STATE=Working  USER_STATE=Acknowledged</pre><div class="note">no times kept · <b class="no">/tmp: gone after a crash</b></div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-ntf"><b>notify renderers</b> <span class="when">at each event</span><br>AGENT_STATE, USER_STATE → pane color</div><div class="rd c-mys"><b>cc-map</b> <span class="when">by hand</span><br>AGENT_STATE → icon</div></div>
+    </div>
+
+    <div class="sep">agent-statusline</div>
+    <div class="row">
+      <div class="w c-stl bg-stl"><div class="who">statusline</div><div class="stream">heartbeat</div><div><span class="trig">⏲ every 10 s + each message</span></div><div class="note">measured: 10 writes in 60 s, gaps 0.8–10.1 s</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-statusline/state/heartbeat/claude · codex</div><pre>1794048747</pre><div class="note">one number <b>per agent</b>: every Claude session overwrites the same file, so it can't say which one is open</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-use"><b>usage claude-quota job</b> <span class="when">every 60 s</span><br>file age &lt; 90 s → "a statusline is on screen" → poll faster</div></div>
+    </div>
+
+    <div class="sep">agent-usage-tracker</div>
+    <div class="row">
+      <div class="w c-use bg-use"><div class="who">usage-tracker</div><div class="stream">statusline payload</div><div><span class="trig">⏲ every 10 s</span></div><div class="note">26 writes in 60 s</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-usage-tracker/data/claude/sessions_usages.db · session_snapshots</div><pre>ts | dt | session_id | model_id | session_cost_usd | prompt_cache
+(80,586 rows)</pre></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-use"><b>usage reports</b> <span class="when">by hand</span><br>cost per Claude session</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-use bg-use"><div class="who">usage-tracker</div><div class="stream">OTel receiver</div><div><span class="trig">✉ Claude Code pushes each API request</span></div><div class="note">always running</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">same db · telemetry</div><pre>ts | dt | event | session_id | model | input_tokens
+| output_tokens | cost_usd   (85,561 rows)</pre></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-use"><b>aggregates</b> <span class="when">every 300 s</span><br>tokens per 5-min slot</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-use bg-use"><div class="who">usage-tracker</div><div class="stream">aggregates</div><div><span class="trig">⏱ every 300 s</span></div><div class="note">reads transcripts · 10 runs in 50 min</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-usage-tracker/data/claude/intermediary.db · requests</div><pre>ts | dt | session_id | folder | model | tokens…
+(88,053 rows)</pre></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-use"><b>5-min slots → VM</b> <span class="when">every 300 s</span><br>tokens per slot</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-use bg-use"><div class="who">usage-tracker</div><div class="stream">quota polls (Claude, Codex)</div><div><span class="trig">⏱ every 60 s</span></div><div class="note">46 runs in 50 min</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-usage-tracker/data/claude/account_quotas.db</div><pre>quota % of the 5-hour and weekly limits</pre></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-stl"><b>statusline</b> <span class="when">every 10 s</span><br>quota % to display</div></div>
+    </div>
+
+    <div class="sep">my-setup</div>
+    <div class="row">
+      <div class="w c-mys bg-mys"><div class="who">my-setup</div><div class="stream">Chrome kit hook</div><div><span class="trig">⚡ PreToolUse</span><span class="trig">⚡ PostToolUse</span><span class="trig">⚡ UserPromptSubmit</span><span class="trig">⚡ Stop</span><span class="trig">⚡ SubagentStop</span></div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/my-setup/state/chrome/ open.json · history/ · sessions/</div><pre>Chrome tabs per (Claude session, subagent):
+authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Claude sessions · stays as it is</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-mys"><b>the hook itself</b> <span class="when">at each event</span><br>is this tab allowed?</div><div class="rd c-mys"><b>agent-chrome status</b> <span class="when">by hand</span><br>who opened what</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-mys bg-mys"><div class="who">my-setup</div><div class="stream">terminal_snapshot.py</div><div><span class="trig">✋ by hand</span></div><div class="note">reads tmux, iTerm2, ~/.claude/sessions · last run 6 days ago</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/.local/state/terminal-snapshot/latest_restore.sh</div><pre>tmux send-keys -t general:0.0 \
+  'cd /Users/jeanlescut &amp;&amp; claude --resume ecc32d88-…'</pre><div class="note">tmux + iTerm2 tabs + each Claude session</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-mys"><b>you</b> <span class="when">after a reboot</span><br>run the script</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-mys bg-mys"><div class="who">my-setup</div><div class="stream">resurrect + continuum (set up today)</div><div><span class="trig">⏱ tmux redraw, 300 s</span><span class="trig bad">1200 s measured</span></div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/my-setup/state/tmux/resurrect/last</div><pre>pane  jeanlescut  0  …  :/Users/jeanlescut  2.1.319  :claude</pre><div class="note">tmux only · <b class="no">"claude" without the UUID</b> → comes back as an empty shell</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-mys"><b>Ctrl-b, then Ctrl-r</b> (tmux prefix, then resurrect's restore) <span class="when">after a crash</span><br>sessions, windows, panes, folders</div></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi bad"><b>4</b><span>places keep "which Claude session is in which pane" (asm, notify, Claude Code, terminal_snapshot), and cc-map works it out a 5th time</span></div>
+    <div class="kpi bad"><b>2</b><span>of them vanish in a crash (Claude Code's, notify's)</span></div>
+    <div class="kpi warn"><b>30 min</b><span>the most asm's "last active" can be late</span></div>
+    <div class="kpi bad"><b>0</b><span>keep a <b>last seen</b> per Claude session</span></div>
+  </div>
+</section>
+
+<!-- ========================= DIAGRAM 2: NEW ========================= -->
+<section>
+  <div class="eyebrow">Diagram 2 · the new design (option 3)</div>
+  <h2>Two small files per Claude session; the rest computed on call</h2>
+  <p class="lede">agent-tracker writes only what nobody else keeps and a crash would lose: <b>where</b> each Claude session runs (pane, PID, folder) and its <b>lifecycle</b> (each start, resume and end). Prompts, answers and their times are already in the transcript: they are read <b>when someone asks</b>, never copied. agent-resume's search index stays in agent-resume; usage and quotas are part of agent-tracker (Scope, below).</p>
+  <div class="diagram">
+    <div class="cols-head"><span>Who writes · trigger</span><span></span><span>What is written · example</span><span></span><span>Who reads · when · which fields</span></div>
+
+    <div class="sep">agent-tracker (new): ~/opt/agent-tracker/data/sessions/&lt;uuid&gt;/</div>
+    <div class="row">
+      <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">last seen: <code>agent-tracker tick</code></div><div><span class="trig">⏲ statusline: every 10 s + each message</span></div><div class="note">no hook writes this file · rewrites it only if pane, folder or window layout changed, or once a minute (+1 <code>tmux display</code> call for the layout) · chained before the statusline display by my-setup's <code>statusLine</code> setting · gets the UUID and folder from Claude Code on stdin, runs inside the pane ($TMUX_PANE)</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-tracker/data/sessions/&lt;uuid&gt;/last_seen.json</div><pre>{"ts":1794051573,"dt":"2026-11-07T11:39:33Z",
+ "agent":"claude","machine":"chan-lescut-macbook-pro","boot_ts":1794046382,
+ "pid":4607,"pid_start":1794047610,
+ "tmux_session":"jeanlescut","window_id":"@0","window_index":0,"pane_id":"%0","pane_index":0,
+ "pane":"jeanlescut:0.0","window_layout":"b25f,208x52,0,0{104x52,0,0,1,103x52,105,0,2}",
+ "cwd":"/Users/jeanlescut",
+ "transcript":"~/.claude/projects/-Users-jeanlescut/cbf1952e-….jsonl"}</pre><div class="note">rewritten whole (temp file + rename), ≤ 1 per minute · <b class="good">after a crash: where every Claude session was, ≤ 1 min before</b></div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-ntf"><b>agent-notify</b> <span class="when">machine · each agent-notify hook · 530–2,880 / day</span><br>UUID (from the hook) → this one file → pane_id</div><div class="rd c-use"><b>agent-tracker quota job</b> <span class="when">machine · launchd · 1,440 / day</span><br>newest ts &lt; 90 s ago → poll faster</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">you · visibility · new</span><br>pane, pid, folder, ts</div><div class="rd c-asm"><b>ares tmux</b> <span class="when">you · after a crash · 2 in 25 days</span><br>pane, window_layout, folder, ts, boot_ts</div><div class="rd c-trk"><b>agent-tracker check</b> <span class="when">you · after an install</span><br>is it fresh (&lt; 2 min)?</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-trk bg-trk"><div class="who">agent-tracker</div><div class="stream">lifecycle: <code>agent-tracker hook start|end</code></div><div><span class="trig">⚡ SessionStart</span><span class="trig">⚡ SessionEnd</span></div><div class="note">moved from asm (same 2 hooks, not new ones) · measured: 17.5 starts + 11 ends / day · never an end on a crash</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-tracker/data/sessions/&lt;uuid&gt;/lifecycle.jsonl</div><pre>{"ts":1794047617,"dt":"2026-11-07T10:33:37Z","event":"start","source":"resume",
+ "agent":"claude","machine":"chan-lescut-macbook-pro","boot_ts":1794046382,
+ "pid":4607,"pid_start":1794047610,"pane_id":"%0","pane":"jeanlescut:0.0","cwd":"/Users/jeanlescut"}
+{"ts":1794050289,"dt":"2026-11-07T11:18:09Z","event":"end","reason":"exit","pid":4607}</pre><div class="note">append-only, one line per start / resume / end · the transcript has no exit entry (verified on 3 ended Claude sessions) · <b>87 of 245</b> starts in 14 days never got an end</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>agent-resume duplicate check</b> <span class="when">machine · each SessionStart · 17.5 / day</span><br>pids of earlier starts: still alive?</div><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">agents · ≈ 1.4 / day</span><br>last event: start (open) or end</div><div class="rd c-asm"><b>ares tmux</b> <span class="when">you · after a crash · 2 in 25 days</span><br>starts of the previous boot with no end</div></div>
+    </div>
+
+    <div class="sep">read on call (by the commands in "Use cases"), never copied</div>
+    <div class="row">
+      <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">transcript (unchanged)</div><div><span class="trig">✉ each message</span></div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/.claude/projects/&lt;folder&gt;/&lt;uuid&gt;.jsonl</div><pre>{"type":"user","timestamp":"2026-11-07T11:18:45Z", …}   ← last prompt
+{"type":"assistant","timestamp":"…", …}               ← last answer</pre><div class="note">the source of truth for activity: prompt and answer times, title, text</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · you · visibility</span><br>last prompt: the end of the file (≤ 256 KB)</div><div class="rd c-asm"><b>agent-resume</b> (<code>ares resume</code>) <span class="when">🔍 on call · you 33 + agents 19 / 30 days</span><br>re-reads only transcripts newer than their index entry</div><div class="rd c-use"><b>agent-tracker aggregates</b> <span class="when">every 300 s</span><br>tokens (as today)</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-cc bg-cc"><div class="who">Claude Code</div><div class="stream">live session file (unchanged)</div><div><span class="trig">✉ start, busy↔idle, exit</span></div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/.claude/sessions/&lt;pid&gt;.json</div><pre>status, updatedAt, name, bridgeSessionId (Remote Control)</pre><div class="note">only useful while the Claude session runs: read live, not copied</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-trk"><b>agent-tracker now</b> <span class="when">🔍 on call · you · visibility</span><br>busy / idle</div><div class="rd c-aac"><b>agent-auto-close</b> (was asm close) <span class="when">by hand · 3 / 30 days</span><br>pid, status, tmux pane</div></div>
+    </div>
+
+    <div class="sep">unchanged or lighter (scope still open)</div>
+    <div class="row">
+      <div class="w c-asm bg-asm"><div class="who">agent-resume</div><div class="stream">search index</div><div><span class="trig good">🔍 refreshed when you search</span><span class="trig">⚡ SessionEnd (VM sync)</span></div><div class="note">the 1800 s job can go, if the VM sync doesn't need it</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-resume/data/indexes/&lt;uuid&gt;.json</div><pre>{"session_id":"…","custom_title":"…","created_at":"…","last_active":"…", text…}
+minus session_state → "ended" file</pre><div class="note">last_active is never late: refreshed at search time</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>agent-resume</b> (<code>ares resume</code>) <span class="when">by hand</span><br>title, text, last_active</div><div class="rd c-asm"><b>agent-resume sync → VM</b> <span class="when">at each exit</span><br>the whole file</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-trk bg-trk"><div class="who">agent-tracker (was usage-tracker)</div><div class="stream">usage: payload · OTel · aggregates · quota polls</div><div><span class="trig">⏲ tick, 10 s</span><span class="trig">✉ OTel push</span><span class="trig">⏱ 300 s</span><span class="trig">⏱ 60 s</span></div><div class="note">unchanged inside; the payload part now runs in <code>agent-tracker tick</code>, not inside the statusline display</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">~/opt/agent-tracker/data/claude/*.db · quota_latest.json</div><pre>sessions_usages.db, intermediary.db, account_quotas.db   (as today)
+quota_latest.json  {"ts":1794051573,"dt":"2026-11-07T11:39:33Z",
+  "five_hour_pct":42,"five_hour_reset":"…","week_pct":18,"week_reset":"…"}   ← new, rewritten when a fresher reading arrives</pre><div class="note">the account's freshest quota, from any Claude session, poller or machine</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-stl"><b>statusline display</b> <span class="when">machine · every 10 s per open Claude session</span><br><code>quota_latest.json</code>: 5-hour and weekly % and resets</div><div class="rd c-trk"><b>agent-tracker usage reports, VM slots</b> <span class="when">by hand · every 300 s</span><br>tokens, cost (as today)</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-stl bg-stl"><div class="who">statusline</div><div class="stream">display only</div><div><span class="trig">⏲ every 10 s + each message</span></div><div class="note">receives Claude Code's JSON from <code>agent-tracker tick</code>, unchanged · contains no tracking code, calls no tracker script</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">the three status lines on screen (no file)</div><pre>model · folder · git · context %
+5h 42% (resets 14:00) · week 18% · $ this session</pre><div class="note">quota from <code>quota_latest.json</code>; model, folder, context and $ from its stdin</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-stl"><b>you</b> <span class="when">on screen</span><br>reading it</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-ntf bg-ntf"><div class="who">agent-notify</div><div class="stream">colors only</div><div><span class="trig">⚡ its own hooks</span></div><div class="note">keeps its state machine (Working, Finished, WaitingForUser)</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">tmux pane options (window-style)</div><pre>bg=#0a1028   (color = state)</pre><div class="note">no more /tmp copy of PIDs, pane, UUID</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-ntf"><b>tmux</b> <span class="when">on screen</span><br>draws the color</div></div>
+    </div>
+    <div class="row">
+      <div class="w c-asm bg-asm"><div class="who">agent-resume</div><div class="stream">resume-tmux (replaces my-setup's terminal_snapshot.py)</div><div><span class="trig">✋ you, after a crash</span></div><div class="note">2 in 25 days · writes nothing: it acts</div></div>
+      <div class="arrow">→</div>
+      <div class="f"><div class="path">what it does (no file)</div><pre>read data/sessions/*/ of the previous boot          ← what was open at the crash
+tmux new-session -d -s general -c ~       ← each tmux session and window
+tmux select-layout -t general:0 'b25f,208x52,0,0{104x52,0,0,1,103x52,105,0,2}'
+tmux send-keys -t general:0.0 'cd ~ &amp;&amp; claude --resume cbf1952e-…' Enter
+open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exact tmux (same windows, same pane sizes) · plain-shell panes come back in ~ · one iTerm2 tab per tmux session (your choice, 2026-11-07)</div></div>
+      <div class="arrow">→</div>
+      <div class="r"><div class="rd c-asm"><b>you</b> <span class="when">after a crash</span><br>every tmux session, pane and Claude session back in one command</div></div>
+    </div>
+
+    <div class="sep">removed</div>
+    <div class="gonegrid">
+      <div class="w c-asm gone"><div class="who">asm lifecycle</div><div class="note">→ moved to agent-tracker's lifecycle.jsonl</div></div>
+      <div class="w c-asm gone"><div class="who">asm 1800 s job (if possible)</div><div class="note">→ refreshed at search time</div></div>
+      <div class="w c-ntf gone"><div class="who">agent-notify static.env</div><div class="note">→ last_seen.json, by UUID</div></div>
+      <div class="w c-stl gone"><div class="who">statusline heartbeat</div><div class="note">→ newest ts of last_seen.json</div></div>
+      <div class="w c-mys gone"><div class="who">terminal_snapshot.py (my-setup)</div><div class="note">→ ares tmux</div></div>
+      <div class="w c-mys gone"><div class="who">resurrect + continuum</div><div class="note">→ ares tmux (once it works)</div></div>
+      <div class="w c-mys gone"><div class="who">cc-map, cc-rc, skill claude-sessions-overview</div><div class="note">parked: every Claude session has Remote Control since 2026-10-22</div></div>
+      <div class="w c-asm gone"><div class="who">asm status</div><div class="note">its UUID, model, $ are on the statusline</div></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi good"><b>0</b><span>new hooks: start and end move from asm</span></div>
+    <div class="kpi good"><b>2</b><span>small files per Claude session; nothing copied from the transcript</span></div>
+    <div class="kpi good"><b>≤ 1 min</b><span>lost about where things were, in a crash (enough for a restore done every ~2 weeks)</span></div>
+    <div class="kpi good"><b>0 s</b><span>lag for last prompt and last active: read from the transcript when asked</span></div>
+  </div>
+</section>
+
+
+<!-- ========================= USE CASES ========================= -->
+<section>
+  <div class="eyebrow">Use cases · who triggers what, and how often</div>
+  <h2>Every command: what it is, who runs it, how often (measured)</h2>
+  <p class="lede">Each <code>agent-tracker …</code> is a <b>command</b> (a small CLI). Programs call it with <code>--json</code>; you can type it. "Machine" = run automatically (hook, statusline, timer); "agents" = an agent runs it because you asked something; "you" = typed by you. Counts: asm's lifecycle files (14 days), your zsh history and the agents' transcripts (30 days), usage-tracker's request log (7 days), Claude Code's live files (now).</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Command</th><th>What it does</th><th>Triggered by</th><th>How often, measured</th><th>Reads · writes</th><th>Lag that matters</th></tr></thead>
+    <tbody>
+      <tr><td class="proj"><code>agent-tracker tick</code></td><td>notes where this Claude session is</td><td><b>machine</b>: the statusline, per open Claude session</td><td>every 10 s each; <b>14 open now</b> → up to 5,040 / hour if hidden panes tick too (to test) · writes ≤ 1 / min each</td><td>stdin → <code>last_seen.json</code></td><td>none</td></tr>
+      <tr><td class="proj"><code>agent-tracker hook start|end</code></td><td>logs a start, resume or end</td><td><b>machine</b>: Claude Code hooks SessionStart, SessionEnd</td><td><b>17.5 starts + 11 ends / day</b></td><td>stdin → <code>lifecycle.jsonl</code> (+1 line)</td><td>none</td></tr>
+      <tr><td class="proj">agent-notify (no command)</td><td>finds its pane</td><td><b>machine</b>: each agent-notify hook (≈ each tool call)</td><td><b>530–2,880 / day</b> (API requests, last 7 days): the most frequent reader</td><td>1 file: <code>data/sessions/&lt;uuid&gt;/last_seen.json</code></td><td>fast: one small file, by UUID</td></tr>
+      <tr><td class="proj">statusline display (no command)</td><td>shows the quota %</td><td><b>machine</b>: the statusline, per open Claude session</td><td>every 10 s each: up to 5,040 / hour with 14 open (if hidden panes tick)</td><td>1 small file: <code>data/claude/quota_latest.json</code></td><td>seconds</td></tr>
+      <tr><td class="proj">agent-tracker quota job (no command)</td><td>"is a statusline on screen?"</td><td><b>machine</b>: launchd, every 60 s</td><td><b>1,440 / day</b></td><td>newest <code>ts</code> among the current boot's <code>last_seen.json</code></td><td>seconds</td></tr>
+      <tr><td class="proj"><code>ares resume</code></td><td>find and reopen a past Claude session</td><td><b>you</b> type it · <b>agents</b> run it</td><td>you <b>33</b> + agents <b>19</b> in 30 days ≈ 1.7 / day</td><td>agent-resume's index, refreshed for changed transcripts (4 ms + a few files)</td><td>you wait: &lt; 1 s</td></tr>
+      <tr><td class="proj"><code>agent-tracker now</code></td><td>prints the open Claude sessions: pane, folder, busy/idle, last prompt (the visibility view)</td><td><b>you</b>, when you want to see what runs where</td><td>new: no program reads it (cc-map and cc-rc, 23 + 20 runs in 30 days, are parked)</td><td>~14 <code>last_seen.json</code>, live files, ~14 transcript ends</td><td>you wait: &lt; 1 s</td></tr>
+      <tr><td class="proj"><code>ares tmux</code> (agent-resume)</td><td>finds what was open at the crash, then puts back every tmux session, window, pane size, and <code>claude --resume</code> in each Claude pane; one iTerm2 tab per tmux session</td><td><b>you</b>, after a crash</td><td><b>2 in 25 days</b> (today terminal_snapshot: agents ran it 9 times in 30 days)</td><td>the previous boot's <code>lifecycle.jsonl</code> + <code>last_seen.json</code>, read directly → acts on tmux and iTerm2</td><td>none</td></tr>
+      <tr><td class="proj"><code>agent-tracker check</code></td><td>says whether every writer is writing on this machine: statusLine chained, hooks installed, a fresh <code>last_seen.json</code> for each open Claude session</td><td><b>you</b>, after installing on a machine (later maybe a job-runner canary)</td><td>new: not measured</td><td><code>~/.claude/sessions</code>, <code>data/</code>, <code>~/.claude/settings.json</code> · writes nothing</td><td>none</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= INSIDE <uuid>/ ========================= -->
+<section>
+  <div class="eyebrow">Inside one Claude session's folder</div>
+  <h2><code style="font-size:21px">~/opt/agent-tracker/data/sessions/&lt;uuid&gt;/</code></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th>Written by</th><th>When</th><th>Holds</th><th>Why not elsewhere</th></tr></thead>
+    <tbody>
+      <tr><td><code>last_seen.json</code></td><td><code>agent-tracker tick</code>, chained before the statusline by my-setup (no hook)</td><td>statusline every 10 s; rewritten only if pane, folder or window layout changed, or once a minute</td><td>one JSON object, rewritten whole (temp + rename): ts, dt, agent, machine, boot_ts, pid, pid_start, tmux_session, window_id, window_index, pane_id, pane_index, pane, window_layout, cwd, transcript</td><td>Claude Code's live file has the pane and PID but is gone after a crash; the transcript has neither</td></tr>
+      <tr><td><code>lifecycle.jsonl</code></td><td><code>agent-tracker hook start|end</code> (SessionStart, SessionEnd)</td><td>each start, resume, <code>/compact</code>, end</td><td>one line per event, appended: ts, dt, event, source, agent, machine, boot_ts, pid, pid_start, pane_id, pane, cwd · end: reason</td><td>the transcript has no pane, PID or exit entry; today in asm; moved here</td></tr>
+    </tbody>
+  </table>
+  </div>
+<pre class="block">~/opt/agent-tracker/data/sessions/
+├─ cbf1952e-21d4-41ec-af21-d33f8a96cbba/          this conversation: open
+│  ├─ last_seen.json   {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","boot_ts":1794046382,"pane":"jeanlescut:0.0","pane_id":"%0","pid":4607,…}
+│  └─ lifecycle.jsonl  start (startup, 10:33)
+├─ d6d2c8bb-24d3-4576-b451-782ad704dc58/          ended normally at 11:18
+│  ├─ last_seen.json   {"ts":1794050280,…,"pane":"agent-resume:0.0",…}
+│  └─ lifecycle.jsonl  start (10:55) · end (exit, 11:18)
+└─ 548ce520-…/                                     previous boot, last event a start, seen until 11:12 → <span class="k">open at crash</span>
+   ├─ last_seen.json   {"ts":1794045130,"boot_ts":1794019000,"pane":"job-applications:0.0",…}
+   └─ lifecycle.jsonl  start (startup, 2026-11-06 14:39) · start (resume, 2026-11-07 09:02)</pre>
+  <p class="lede" style="font-size:13px">Your ideas: <code>last_seen.json</code> is kept as you named it, written by no hook. <code>lifecycle.jsonl</code> (your point, 2026-11-07) replaces the empty <code>ended</code> file: history of starts, resumes and ends for ~30 lines a day. <code>index.json</code> / <code>activity.jsonl</code> is dropped: the transcript already holds every prompt and answer with its time. <code>usage.jsonl</code> waits for the scope decision.</p>
+</section>
+
+<!-- ========================= READ TIME ========================= -->
+<section>
+  <div class="eyebrow">Computed on call</div>
+  <h2>What each command reads (frequencies: Use cases, above)</h2>
+<pre class="block"><span class="k">agent-tracker now</span>            (you: the visibility view)
+  for each data/sessions/&lt;uuid&gt;/ whose lifecycle's last event is a start of the current boot:
+    alive?      pid running AND its start time == pid_start          (a reused PID does not count)
+    where?      pane_id → its place now (tmux list-panes)
+    busy/idle?  ~/.claude/sessions/&lt;pid&gt;.json                      (live, Claude Code's own)
+    last prompt the end of the transcript (≤ 256 KB): last "user" entry
+
+<span class="k">ares tmux</span>, step 1 "what was open at the crash"   (a feature: in agent-resume, reads the files directly)
+  prev_boot  = the newest boot_ts that is not the current one
+  last_tick  = the newest ts among prev_boot's folders                 (≈ the moment of the crash)
+  each folder whose last lifecycle event is a start in prev_boot, with ts ≥ last_tick − 2 min  (killed ones stopped ticking)
+  one per pane_id: the newest ts wins                                   (the pane was reused)
+
+<span class="k">agent-tracker check</span>          (you, after an install: visibility of the data itself)
+  each open Claude session (Claude Code's ~/.claude/sessions): a start line and a last_seen.json &lt; 2 min old?
+  is my-setup's statusLine chained through agent-tracker tick? are the two hooks installed?
+  → one line per problem: "no last_seen.json for 3 open Claude sessions: statusLine not chained on this machine"
+
+<span class="k">ares resume</span> (agent-resume)
+  for each transcript newer than its index entry (checking all dates: 4 ms): re-read it, update the entry
+  then search as today</pre>
+
+  <h3>The three options for "last prompt / last active", measured 2026-11-07</h3>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Option</th><th>Writes</th><th>Work</th><th>Lag</th><th>Extra copy on disk</th></tr></thead>
+    <tbody>
+      <tr><td class="proj">1 · append at every hook</td><td>each prompt + each stop, ≈ 40 / hour per active Claude session</td><td>one extra process per prompt and per stop (~5 ms each, not measured), all day</td><td>0</td><td class="no">yes: a copy of the transcript</td></tr>
+      <tr><td class="proj">2 · index every 5 min</td><td>288 runs / day</td><td>each run: check every transcript's date (<b>4 ms</b>, measured) + re-read the few that changed + ~50 ms Python start (not measured)</td><td class="meh">≤ 5 min</td><td class="no">yes: the index</td></tr>
+      <tr class="win"><td class="proj">3 · when asked (chosen)</td><td class="good">none</td><td>per question: check dates 4 ms + read the end of only the changed transcripts. Worst case, all 3,014 (2.5 GB): <b>1.85 s</b>, measured</td><td class="good">0</td><td class="good">none (agent-resume's index refreshed only for changed files)</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= COPY RULE ========================= -->
+<section>
+  <div class="eyebrow">Copy only with a reason</div>
+  <h2>Each fact: where it lives, and whether agent-tracker keeps it</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Fact</th><th>Claude Code's live file</th><th>Transcript</th><th>After a crash</th><th>agent-tracker keeps it?</th></tr></thead>
+    <tbody>
+      <tr><td>UUID, pid, folder, tmux pane</td><td class="good">yes</td><td>folder only</td><td class="no">pane, pid gone</td><td class="good">yes, <code>last_seen.json</code></td></tr>
+      <tr><td>last seen (while idle too)</td><td class="meh">updatedAt only on busy↔idle</td><td class="no">no</td><td class="no">gone</td><td class="good">yes, <code>last_seen.json</code> ts</td></tr>
+      <tr><td>start, resume, end history</td><td class="meh">file created / deleted</td><td class="no">no exit entry</td><td>can't tell from a crash</td><td class="good">yes, <code>lifecycle.jsonl</code></td></tr>
+      <tr><td>prompt and answer times, last prompt, title</td><td class="no">no</td><td class="good">yes</td><td class="good">kept</td><td class="no">no: read from the transcript</td></tr>
+      <tr><td>busy / idle, name, Remote Control</td><td class="good">yes</td><td>—</td><td class="no">gone (not needed then)</td><td class="no">no: read live</td></tr>
+      <tr><td>anything Codex</td><td class="no">no such file</td><td>its own rollout files</td><td>—</td><td class="good">yes, same two files</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= LOOKUPS ========================= -->
+<section>
+  <div class="eyebrow">Lookups</div>
+  <h2>How each reader finds its data: by which key</h2>
+  <p class="lede">Every hook and the statusline already get the Claude session's <b>UUID</b> from Claude Code (stdin), so they open <code>data/sessions/&lt;uuid&gt;/</code> directly. Readers that start from a <b>tmux pane</b> use <code>agent-tracker now --pane %0</code>, which looks through the current boot's folders (~30). No extra index by pane or PID: it would be one more copy to keep in sync.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Reader</th><th>Starts from</th><th>Today</th><th>New</th></tr></thead>
+    <tbody>
+      <tr><td class="proj">agent-resume (<code>ares resume</code>)</td><td>text, folder or UUID</td><td>scans every <code>indexes/*.json</code> (up to 30 min old)</td><td>refreshes changed entries, then scans them</td></tr>
+      <tr><td class="proj">agent-auto-close</td><td>a picked Claude session</td><td><code>~/.claude/sessions/*.json</code> → pid</td><td>unchanged (live)</td></tr>
+      <tr><td class="proj">agent-resume duplicate check</td><td>UUID (hook)</td><td><code>lifecycles/&lt;uuid&gt;.jsonl</code> → old pids</td><td><code>data/sessions/&lt;uuid&gt;/last_seen.json</code> → pid still alive?</td></tr>
+      <tr><td class="proj">agent-notify hooks</td><td><b>shell PID</b></td><td><code>/tmp/agent-notify-$USER/&lt;shell_pid&gt;/</code></td><td><b>UUID</b> (hook) → <code>data/sessions/&lt;uuid&gt;/last_seen.json</code> → pane</td></tr>
+      <tr><td class="proj">cc-map, cc-rc</td><td><b>tmux pane</b></td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td class="no">parked (every Claude session has Remote Control since 2026-10-22)</td></tr>
+      <tr><td class="proj">terminal_snapshot → ares tmux</td><td>tmux pane · the previous boot</td><td>pane → process tree → <code>~/.claude/sessions/&lt;pid&gt;.json</code></td><td>the previous boot's <code>data/sessions/*/</code>, read directly</td></tr>
+      <tr><td class="proj">agent-tracker quota job</td><td>agent type</td><td><code>heartbeat/claude</code> age</td><td>newest ts among <code>data/sessions/*/last_seen.json</code></td></tr>
+      <tr><td class="proj">statusline display</td><td>the account (not a Claude session)</td><td>pipes its JSON to usage-tracker's <code>statusline_payload_reader.py</code>, which prints back the freshest quota</td><td>reads <code>data/claude/quota_latest.json</code>; no tracker code in the display</td></tr>
+      <tr><td class="proj">agent-tracker payload, Chrome kit</td><td>UUID</td><td>their own stores</td><td>payload: inside <code>agent-tracker tick</code> · Chrome kit: unchanged</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= STATUSLINE OWNERSHIP ========================= -->
+<section>
+  <div class="eyebrow">Who owns the statusline call</div>
+  <h2>Installing the statusline on a new VM must not drop the tracking</h2>
+  <p class="lede">Claude Code runs <b>one</b> <code>statusLine</code> command. That setting is owned by <b>my-setup</b> (<code>modules/claude_config.sh</code>, skill config-ownership) and points to agent-statusline's script. So the tracking must not live inside agent-statusline's display code.</p>
+  <div class="cards">
+    <div class="opt win"><b>Chained by my-setup (proposed)</b><span><code>statusLine = agent-tracker tick | bash statusline-command.sh</code>. <code>tick</code> reads Claude Code's JSON from stdin, writes <code>last_seen.json</code> in the background, and passes the same JSON on to the display. agent-statusline has no tracking code to lose. Without agent-tracker installed, my-setup writes the display alone.</span></div>
+    <div class="opt lose"><b>One line inside agent-statusline's script</b><span>a rewrite of the display can drop it silently; installing the statusline on a VM decides whether tracking happens.</span></div>
+    <div class="opt lose"><b>agent-tracker takes over the setting</b><span>two projects fighting over one key: the last install wins.</span></div>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>New VM gets</th><th>Display</th><th>Tracking</th></tr></thead>
+    <tbody>
+      <tr><td>my-setup + agent-statusline</td><td class="good">yes</td><td class="meh">no (no agent-tracker), nothing breaks</td></tr>
+      <tr><td>my-setup + agent-statusline + agent-tracker</td><td class="good">yes</td><td class="good">yes: my-setup chains both</td></tr>
+      <tr><td>agent-statusline reinstalled later</td><td class="good">yes</td><td class="good">yes: the chain lives in my-setup's setting</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= COLLISIONS ========================= -->
+<section>
+  <div class="eyebrow">Write collisions</div>
+  <h2>No file is shared by two Claude sessions</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Who writes at the same time</th><th>Same file?</th><th>Why it is safe</th></tr></thead>
+    <tbody>
+      <tr><td>two Claude sessions</td><td class="good">no</td><td>one folder each</td></tr>
+      <tr><td>two ticks of one Claude session</td><td class="meh">yes, <code>last_seen.json</code></td><td>temp file + rename: a reader sees the old or the new file, never half; the last one wins, which is the right answer</td></tr>
+      <tr><td>two hooks of one Claude session (a resume starting while the old process ends)</td><td class="meh">yes, <code>lifecycle.jsonl</code></td><td>one append of &lt; 512 bytes each (<code>&gt;&gt;</code>): appended whole, never mixed; ~30 lines a day in total, so a clash is very rare. <i>To test on APFS.</i></td></tr>
+      <tr><td>a power cut mid-write</td><td>—</td><td>rename is all-or-nothing: the old <code>last_seen.json</code> stays</td></tr>
+      <tr><td><b>today:</b> the heartbeat, written by every Claude session</td><td class="no">yes</td><td>last writer wins, so it can't say which Claude session is open</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= SCOPE ========================= -->
+<section>
+  <div class="eyebrow">Scope · decided 2026-11-07</div>
+  <h2>What agent-tracker must own, and what may stay apart</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Data</th><th>In agent-tracker?</th><th>If it stays apart</th><th>For joining</th><th>For staying apart</th></tr></thead>
+    <tbody>
+      <tr><td class="proj">where it runs, ended, last seen</td><td class="good">yes, the core</td><td>—</td><td colspan="2">copied 4 times today</td></tr>
+      <tr><td class="proj">agent-resume's search index (title, text)</td><td class="no">no: stays in agent-resume</td><td>agent-resume, refreshed at search time</td><td colspan="2"><b>decided (you, 2026-11-07):</b> only <code>ares resume</code> uses it, to search faster</td></tr>
+      <tr><td class="proj">the crash restore (rebuilding tmux and Claude sessions)</td><td class="no">no: in agent-resume</td><td><code>ares tmux</code></td><td colspan="2"><b>decided (you, 2026-11-07):</b> agent-resume finds and resumes, one Claude session or a whole setup; agent-tracker only says what was where</td></tr>
+      <tr><td class="proj">tokens, cost, quotas</td><td class="good">yes: merged</td><td>—</td><td colspan="2"><b>decided (you, 2026-11-07):</b> agent-usage-tracker is already a data layer ("never write: only this project's gates write", its <code>FOR_READERS.md</code>), uses the same tick and the same key (UUID). It grows the session files and is renamed agent-tracker; its databases and jobs stay as they are</td></tr>
+      <tr><td class="proj">pane colors</td><td class="no">no</td><td>agent-notify</td><td colspan="2">display, not tracking</td></tr>
+      <tr><td class="proj">Chrome tabs</td><td class="no">no</td><td>my-setup's Chrome kit</td><td colspan="2">tabs, not Claude sessions</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="ask"><b>Decided (you, 2026-11-07):</b> the crash restore moves to agent-resume as <code>ares tmux</code>: exact tmux (agent-tracker also keeps each window's layout), plain-shell panes back in <code>~</code>, one iTerm2 tab per tmux session. my-setup's <code>terminal_snapshot.py</code> and resurrect + continuum go once it works. Usage and quotas: merged (agent-usage-tracker renamed agent-tracker).</div>
+</section>
+
+
+<!-- ========================= PROJECTS AROUND ========================= -->
+<section>
+  <div class="eyebrow">The projects around agent-tracker · decided 2026-11-07</div>
+  <h2>One job each: record, resume, close</h2>
+<pre class="block"><span class="k">agent-tracker</span>     data + visibility   tick · hook start|end · now · check      (was agent-usage-tracker)
+<span class="k">agent-resume</span>      search &amp; resume     ares resume · ares inject · ares tmux (← terminal_snapshot)   (was asm)
+<span class="k">agent-auto-close</span>  closing             close by hand (← asm close) + when to close idle Claude sessions</pre>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Decision</th><th>Status</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr><td>asm → <b>agent-resume</b>, command <b><code>ares</code></b> (<code>asm</code> kept as an alias for a while)</td><td class="good">decided</td><td>its one job is search and resume; inject, the tmux restore and the phone's Remote Control are other ways of resuming. <code>asr</code> is taken (/usr/sbin/asr)</td></tr>
+      <tr><td><code>asm close</code> → <b>agent-auto-close</b>, action and policy together</td><td class="good">decided</td><td>close shares no data with resume (its screen file is never read by resume); only the keyword picker is shared, not needed for 3 manual closes a month</td></tr>
+      <tr><td>crash restore = <b><code>ares tmux</code></b></td><td class="good">decided</td><td>asm's DEV_DOC.md (R4/R5) already planned crash recovery and tmux layout restore, "not implemented"</td></tr>
+      <tr><td>cc-map, cc-rc and the skill claude-sessions-overview: <b>parked</b> (not moved)</td><td class="good">decided</td><td>built 2026-10-17 to turn /rc on one Claude session at a time from the phone; since 2026-10-22 (my-setup <code>ae5a3ae</code>, <code>remoteControlAtStartup</code>) every Claude session has Remote Control and shows in the Claude app's Code tab by itself</td></tr>
+      <tr><td>asm's <code>status</code> script: remove</td><td class="good">decided</td><td>written at Meta, reason never recorded; what it shows (UUID, model, $) is on the statusline now</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ========================= MEASUREMENTS ========================= -->
+<section>
+  <div class="eyebrow">Measurements behind diagram 1</div>
+  <h2>Promised vs measured, and the lag each reader sees</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Stream</th><th>Promised</th><th>Measured (11:31–12:21)</th><th>Lag readers see</th><th>Survives a crash</th></tr></thead>
+    <tbody>
+      <tr><td class="proj">statusline heartbeat</td><td>10 s + each message</td><td>10 writes / 60 s, gaps 0.8–10.1 s</td><td>≤ 10 s</td><td class="good">yes</td></tr>
+      <tr><td class="proj">usage payload</td><td>10 s</td><td>26 writes / 60 s (state folder)</td><td>≤ 10 s</td><td class="good">yes</td></tr>
+      <tr><td class="proj">usage quota polls</td><td>60 s</td><td>46 runs / 50 min</td><td>110–480 s, by design</td><td class="good">yes</td></tr>
+      <tr><td class="proj">usage aggregates</td><td>300 s</td><td>10 runs / 50 min</td><td>≤ 300 s</td><td class="good">yes</td></tr>
+      <tr><td class="proj">notify refresh</td><td>≤ 300 s, piggybacked</td><td>state.env 83 s / 114 s old</td><td>none for state</td><td class="no">no</td></tr>
+      <tr><td class="proj">continuum save</td><td>300 s</td><td class="no">2 saves / 30 min (1200 s)</td><td>20 min</td><td class="good">yes</td></tr>
+      <tr><td class="proj">asm reindex</td><td>1800 s + each exit</td><td>2 runs / 50 min</td><td class="meh">1085 s (last_active of this conversation)</td><td class="good">yes</td></tr>
+      <tr><td class="proj">Claude Code live file</td><td>each busy↔idle change</td><td>0 writes / 60 s while busy</td><td>none</td><td class="no">no</td></tr>
+      <tr><td class="proj">terminal_snapshot (→ ares tmux)</td><td>by hand</td><td>last run 2026-11-01</td><td class="no">6 days</td><td class="good">yes</td></tr>
+      <tr><td class="proj">read time: dates of all transcripts</td><td>—</td><td><b>4 ms</b> (3,014 files)</td><td>—</td><td>—</td></tr>
+      <tr><td class="proj">read time: end of every transcript</td><td>—</td><td><b>1.85 s</b> (2.5 GB, worst case)</td><td>—</td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="lede" style="font-size:13px">How: plists in <code>~/Library/LaunchAgents/</code> and <code>launchctl print</code> (runs since login); a 60 s sample of file changes every 0.25 s; file ages at 12:20; real examples read from each file at 12:40; the transcript of this conversation and of 3 ended ones; a read-only inventory of each repo's code. Not measured: how long a hook takes; anything Codex (no Codex session today).</p>
+</section>
+
+<section>
+  <div class="eyebrow">Steps and open points</div>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>#</th><th>Step</th><th>Touches</th><th>Done when</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td>this design, reviewed by you</td><td>—</td><td>you say yes</td></tr>
+      <tr><td class="n">1b</td><td>rename agent-usage-tracker → agent-tracker (GitHub repo, <code>~/dev</code>, <code>~/opt</code>, launchd labels, the VM, every reader's path); move these design files into it; this temporary <code>~/dev/agent-tracker</code> folder goes, with your OK</td><td>agent-usage-tracker, agent-statusline, readers</td><td>everything works under the new name; <code>check</code> is green</td></tr>
+      <tr><td class="n">2</td><td><code>tick</code> (session files + the payload reader moved in, + <code>quota_latest.json</code>) + <code>hook start|end</code> + my-setup's chain; the statusline display reads <code>quota_latest.json</code>; nothing else removed</td><td>agent-tracker, agent-statusline, my-setup</td><td>a folder per Claude session, for 2 days</td></tr>
+      <tr><td class="n">3</td><td><code>now</code> and <code>check</code> (agent-tracker); <code>ares tmux</code> (agent-resume); then remove terminal_snapshot.py and resurrect + continuum</td><td>agent-tracker, agent-resume, my-setup</td><td>a killed test tmux gets its windows, pane sizes and Claude sessions back</td></tr>
+      <tr><td class="n">4</td><td>asm → agent-resume (<code>ares</code>): index refreshed at search time; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job; <code>asm close</code> → agent-auto-close</td><td>agent-resume, agent-auto-close</td><td><code>ares resume --state pending</code> gives the same list, with no lag</td></tr>
+      <tr><td class="n">5</td><td>agent-notify and agent-tracker's quota job read it; their copies removed; cc-map, cc-rc and the skill parked; asm's <code>status</code> removed</td><td>each repo</td><td>each one's tests pass</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <tbody>
+      <tr><td>Does Claude Code run the statusline while its pane is hidden (another tmux window)?</td><td>decides whether last seen means "open" or "on screen", the 2-min rule of ares tmux's crash step, and the tick count (5,040 / hour with 14 open) · test in step 2</td></tr>
+      <tr><td>Does the VM sync still need agent-resume's 1800 s job?</td><td>if not, it goes</td></tr>
+      <tr><td>Codex: statusline interval, SessionEnd hook</td><td>not measured: no Codex session today</td></tr>
+      <tr><td>Why continuum saved 2 times in 30 min instead of 6</td><td>moot if it is removed</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>Measured on chan-lescut-macbook-pro, 2026-11-07, 11:31–12:48 CET (one boot). Sources: <code>/Users/jeanlescut/dev/agent-tracker/DESIGN.md</code>, <code>AGENTS.md</code>.</footer>
+</div>
+</body>
+</html>
