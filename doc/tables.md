@@ -4,7 +4,7 @@ What each table holds, which collector fills it from which upstream source, and 
 
 Markers: **[verified]** was measured on this machine's data; **[docs]** comes from official documentation.
 
-*Last verified: 2026-11-07 (the statusline recording moved into `agent-tracker tick`, rows unchanged: `tests/test_agent_tracker.sh`, `tests/test_ingest_claude_statusline.sh`); before that 2026-10-12 (P13 + P14 on both machines: the slots equal a separate count of every request, Mac 3,331 / VM 41, the VM's copy of the Mac's identical). Earlier verifications: `doc/changes.md`.*
+*Last verified: 2026-11-07 (`quota_latest.json` replaced on a same-`ts` tie with other values; no session folder for `claude -p` / SDK processes: `tests/test_agent_tracker.sh`); 2026-11-07 (the statusline recording moved into `agent-tracker tick`, rows unchanged: `tests/test_agent_tracker.sh`, `tests/test_ingest_claude_statusline.sh`); before that 2026-10-12 (P13 + P14 on both machines: the slots equal a separate count of every request, Mac 3,331 / VM 41, the VM's copy of the Mac's identical). Earlier verifications: `doc/changes.md`.*
 
 ---
 

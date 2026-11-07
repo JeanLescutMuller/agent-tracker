@@ -191,11 +191,11 @@ def alive(pid, pid_start) -> bool:
     return info is not None and pid_start is not None and abs(info[1] - int(pid_start)) <= 1
 
 
-def proc_name(pid: int) -> str | None:
-    """The name a process was started as: the basename of its argv[0]
-    ("claude", "codex"). Not the kernel's command name, which is the real
-    binary's (Claude Code's is its version, "2.1.319": verified 2026-11-07).
-    macOS: sysctl KERN_PROCARGS2; Linux: /proc/<pid>/cmdline; else `ps`."""
+def proc_argv(pid: int) -> list[str] | None:
+    """A process's arguments, argv[0] first, exactly as it was started (no
+    splitting on spaces), or None when there is no such process or it is not
+    readable. macOS: sysctl KERN_PROCARGS2; Linux: /proc/<pid>/cmdline; else
+    `ps` (split on spaces)."""
     try:
         if sys.platform == "darwin":
             import ctypes
@@ -206,17 +206,37 @@ def proc_name(pid: int) -> str | None:
             buf = ctypes.create_string_buffer(size.value)
             if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, ctypes.c_size_t(0)) != 0:
                 return None
+            argc = struct.unpack_from("i", buf.raw, 0)[0]
             raw = buf.raw[4:size.value]                       # after argc: exec path, NULs, argv[0], ...
             _, _, rest = raw.partition(b"\0")
-            argv0 = rest.lstrip(b"\0").split(b"\0")[0]
-            return os.path.basename(argv0.decode(errors="replace")) or None
+            return [a.decode(errors="replace") for a in rest.lstrip(b"\0").split(b"\0")[:argc]]
         if os.path.exists("/proc/self/cmdline"):
-            return os.path.basename(Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[0].decode(errors="replace"))
-    except Exception:                                     # no such process, or not allowed: no name
+            return [a.decode(errors="replace") for a in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[:-1]]
+    except Exception:                                     # no such process, or not allowed
         return None
     import subprocess
-    out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout.split()
-    return os.path.basename(out[0]) if out else None
+    return subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout.split() or None
+
+
+def proc_name(pid: int) -> str | None:
+    """The name a process was started as: the basename of its argv[0]
+    ("claude", "codex"). Not the kernel's command name, which is the real
+    binary's (Claude Code's is its version, "2.1.319": verified 2026-11-07)."""
+    l_argv = proc_argv(pid)
+    return (os.path.basename(l_argv[0]) or None) if l_argv else None
+
+
+def is_conversation(d_live: dict | None, pid: int | None = None) -> bool:
+    """Whether a Claude process is a conversation someone opened in a terminal:
+    not `claude -p` and not an SDK process (entrypoint sdk-cli: the Remote
+    Control bridge, `claude --print --sdk-url ...`, whose live file says
+    kind "interactive": verified 2026-11-07). Claude Code's live file
+    (sessions/<pid>.json) says; without it (at SessionStart it may not be
+    written yet), the command line: -p or --print. Nothing to go by: yes."""
+    if isinstance(d_live, dict) and d_live:
+        return d_live.get("kind", "interactive") == "interactive" and d_live.get("entrypoint", "cli") == "cli"
+    l_argv = proc_argv(pid) if isinstance(pid, int) else None
+    return not (l_argv and {"-p", "--print"} & set(l_argv[1:]))
 
 
 def agent_pid(agent: str) -> tuple[int | None, int | None]:
@@ -298,7 +318,10 @@ def quota_path(agent: str) -> Path:
 
 def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week) -> bool:
     """Writes data/<agent>/quota_latest.json when this reading is fresher
-    (larger ts) than the one there; returns whether it did. Windows are
+    (larger ts) than the one there, or as old with other values; returns
+    whether it did. A tie with other values is a later reading: a Claude
+    session can report a new percent under the same ts (its last answer's
+    time), 85 times in 2 days on 2026-11-07 (31% kept, 32% refused). Windows are
     {"used_percentage", "resets_at" (epoch s)} or None, the shape of Claude
     Code's statusline `rate_limits`. One writer at a time (flock on the
     folder), so an older reading never replaces a newer one."""
@@ -309,7 +332,8 @@ def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week) 
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         d_old = read_json(path)
-        if isinstance(d_old, dict) and isinstance(d_old.get("ts"), int) and d_old["ts"] >= ts:
+        if isinstance(d_old, dict) and isinstance(d_old.get("ts"), int) and (
+                d_old["ts"] > ts or d_old["ts"] == ts and (d_old.get("five_hour"), d_old.get("seven_day")) == (d_five, d_week)):
             return False
         write_json_atomic(path, {"ts": int(ts), "dt": iso(ts), "source": source, "machine": machine_name,
                                  "five_hour": d_five, "seven_day": d_week})
@@ -444,6 +468,9 @@ def append_lifecycle(event: str, d_hook: dict, agent: str) -> bool:
         return False
     now = int(time.time())
     pid, pid_start = agent_pid(agent)
+    if agent == "claude" and pid is not None and \
+            not is_conversation(read_json(CLAUDE_DIR / "sessions" / f"{pid}.json"), pid):
+        return False     # claude -p or an SDK process: no folder (design/IMPLEMENTATION.md §5)
     if event == "start":
         pane_id = os.environ.get("TMUX_PANE") or None
         pane = (tmux("display", "-p", "-t", pane_id, "#{session_name}:#{window_index}.#{pane_index}") or "").strip() \
@@ -548,6 +575,8 @@ def open_sessions() -> list:
         if pane_id and d_panes is None:
             d_panes = panes_now()
         d_live = read_json(CLAUDE_DIR / "sessions" / f"{d_start['pid']}.json") or {}
+        if not is_conversation(d_live, d_start["pid"]):
+            continue
         transcript = d_seen.get("transcript") or next(iter(CLAUDE_DIR.glob(f"projects/*/{entry.name}.jsonl")), None)
         d_prompt = last_prompt(transcript)
         d_where = (d_panes or {}).get(pane_id) or {}
@@ -608,6 +637,8 @@ def cmd_check() -> int:
             continue
         if proc_info(d_live["pid"]) is None:          # left over from a crash
             continue
+        if not is_conversation(d_live):
+            continue   # claude -p, or an SDK process (the Remote Control bridge): no folder, no statusline
         uuid, where = d_live["sessionId"], f"pid {d_live['pid']}" + (f", tmux {d_live['tmux']}" if d_live.get("tmux") else "")
         folder = SESSIONS_DIR / uuid
         if not folder.is_dir():
@@ -616,8 +647,6 @@ def cmd_check() -> int:
             continue
         if not any(e.get("event") == "start" for e in lifecycle_events(folder)):
             l_problems.append(f"no start line in data/sessions/{uuid}/lifecycle.jsonl ({where}): SessionStart hook missing")
-        if d_live.get("kind", "interactive") != "interactive" or d_live.get("entrypoint", "cli") != "cli":
-            continue   # claude -p, or an SDK process (entrypoint sdk-cli: the Remote Control bridge): no statusline
         d_seen = read_json(folder / "last_seen.json")
         if not isinstance(d_seen, dict) or not isinstance(d_seen.get("ts"), int):
             l_problems.append(f"no last_seen.json for open Claude session {uuid} ({where}): statusLine not chained")

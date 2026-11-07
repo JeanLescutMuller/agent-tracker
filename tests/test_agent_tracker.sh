@@ -130,6 +130,17 @@ printf '%s\n' '{"type":"assistant","timestamp":"2026-11-07T11:00:00Z"}' > "$S/ne
 jq -c '.transcript_path = $t | .session_id = "u9" | .rate_limits.five_hour.used_percentage = 61.5' --arg t "$S/new.jsonl" "$S/p1.json" > "$S/p_new.json"
 at tick < "$S/p_new.json" > /dev/null
 assert_eq "a fresher one replaces it (percent unrounded)" "1794049200 61.5" "$(jq -r '"\(.ts) \(.five_hour.used_percentage)"' "$QL")"
+# The same ts again (a Claude session reporting a new percent under its last answer's time):
+# other values replace it, the same values write nothing.
+jq -c '.rate_limits.five_hour.used_percentage = 62' "$S/p_new.json" > "$S/p_tie.json"
+at tick < "$S/p_tie.json" > /dev/null
+assert_eq "the same ts with another percent replaces it (2026-11-07: 31% kept, 32% refused)" "1794049200 62" \
+    "$(jq -r '"\(.ts) \(.five_hour.used_percentage)"' "$QL")"
+assert_eq "...the same ts with the same values writes nothing" "False" \
+    "$(cd "$REPO_ROOT/src" && python3 -c "
+import json, agent_tracker as a
+d = json.load(open('$QL'))
+print(a.offer_quota('claude', d['ts'], 'statusline', 'other-machine', d['five_hour'], d['seven_day']))")"
 jq -c 'del(.rate_limits) | .session_id = "u9"' "$S/p1.json" > "$S/p_nolimits.json"
 at tick < "$S/p_nolimits.json" > /dev/null
 assert_eq "a payload without rate_limits changes nothing" "1794049200" "$(jqf .ts "$QL")"
@@ -238,6 +249,17 @@ ln -s "$(command -v bash)" "$S/codex"
 "$S/codex" -c 'printf "{\"session_id\":\"c1\",\"cwd\":\"/w\",\"source\":\"startup\"}" | python3 "$AT" hook start --agent codex; echo $$ > "$S/codex-pid"'
 assert_eq "Codex: agent codex, pid = the nearest process started as codex" "codex $(cat "$S/codex-pid")" \
     "$(head -1 "$DATA/sessions/c1/lifecycle.jsonl" | jq -r '"\(.agent) \(.pid)"')"
+# The Remote Control bridge: its live file says entrypoint sdk-cli (kind "interactive"). claude -p:
+# no live file yet, its command line has --print. Neither gets a folder, at start or end.
+ln -s "$(command -v bash)" "$S/claude"
+"$S/claude" -c 'printf "{\"pid\":%d,\"sessionId\":\"u-bridge\",\"kind\":\"interactive\",\"entrypoint\":\"sdk-cli\"}" $$ > "$CLAUDE_CONFIG_DIR/sessions/$$.json"
+    for e in start end; do printf "{\"session_id\":\"u-bridge\",\"cwd\":\"/w\"}" | python3 "$AT" hook $e; done; rm "$CLAUDE_CONFIG_DIR/sessions/$$.json"'
+assert_eq "an SDK process (the Remote Control bridge): no folder" "no" "$([ -e "$DATA/sessions/u-bridge" ] && echo yes || echo no)"
+"$S/claude" -c 'for e in start end; do printf "{\"session_id\":\"u-print\",\"cwd\":\"/w\"}" | python3 "$AT" hook $e; done' x --print
+assert_eq "claude --print, before its live file exists: no folder" "no" "$([ -e "$DATA/sessions/u-print" ] && echo yes || echo no)"
+"$S/claude" -c 'printf "{\"session_id\":\"u-typed\",\"cwd\":\"/w\"}" | python3 "$AT" hook start' x --model opus
+assert_eq "...a conversation started as claude, no live file yet: recorded" "start" \
+    "$(jq -r .event "$DATA/sessions/u-typed/lifecycle.jsonl" 2>/dev/null)"
 out="$(printf 'garbage' | at hook start; echo "rc=$?")"
 assert_eq "bad JSON: nothing printed, exit 0" "rc=0" "$out"
 assert_contains "...logged" "$(cat "$AGENT_TRACKER_HOME/logs/hook-errors.log")" "hook start failed"
@@ -297,6 +319,15 @@ cp "$DATA/sessions/u2/lifecycle.jsonl" "$S/lc2"
 jq -c ".pid_start -= 100" "$S/lc2" > "$DATA/sessions/u2/lifecycle.jsonl"
 assert_eq "a pid whose start time differs (reused): not open" "u1" "$(at now --json | jq -r "$OURS")"
 cp "$S/lc2" "$DATA/sessions/u2/lifecycle.jsonl"
+# A folder written before the rule (the seed of 2026-11-07) for a live SDK process: not listed.
+sleep 600 & PID_SDK=$!; L_PIDS+=("$PID_SDK")
+printf '{"pid":%d,"sessionId":"u3","kind":"interactive","entrypoint":"sdk-cli"}' "$PID_SDK" > "$CLAUDE_CONFIG_DIR/sessions/$PID_SDK.json"
+mkdir -p "$DATA/sessions/u3"
+printf '{"ts":1,"dt":"x","event":"start","source":"seed","agent":"claude","boot_ts":%s,"pid":%s,"pid_start":%s,"pane_id":null,"cwd":"/w"}\n' \
+    "$(jqf .boot_ts "$SEEN")" "$PID_SDK" "$(cd "$REPO_ROOT/src" && python3 -c "import agent_tracker as a; print(a.proc_info($PID_SDK)[1])")" \
+    > "$DATA/sessions/u3/lifecycle.jsonl"
+assert_eq "an SDK process with a folder: not in now" "u1 u2" "$(at now --json | jq -r "$OURS")"
+kill "$PID_SDK" 2>/dev/null; rm -f "$CLAUDE_CONFIG_DIR/sessions/$PID_SDK.json"
 printf '{"ts":1,"dt":"x","event":"start"' >> "$DATA/sessions/u2/lifecycle.jsonl"
 assert_eq "a last line without its newline is ignored" "u1 u2" "$(at now --json | jq -r "$OURS")"
 cp "$S/lc2" "$DATA/sessions/u2/lifecycle.jsonl"
@@ -317,11 +348,14 @@ printf '{"pid":%d,"sessionId":"u-unknown","kind":"interactive"}' $! > "$CLAUDE_C
 sleep 600 & L_PIDS+=($!)
 printf '{"pid":%d,"sessionId":"u-batch","kind":"sdk-cli"}' $! > "$CLAUDE_CONFIG_DIR/sessions/$!.json"
 mkdir -p "$DATA/sessions/u-batch" && printf '{"event":"start"}\n' > "$DATA/sessions/u-batch/lifecycle.jsonl"
+sleep 600 & L_PIDS+=($!)
+printf '{"pid":%d,"sessionId":"u-sdk","kind":"interactive","entrypoint":"sdk-cli"}' $! > "$CLAUDE_CONFIG_DIR/sessions/$!.json"
 jq '.statusLine.command = "bash ~/.claude/statusline-command.sh" | del(.hooks.SessionEnd)' "$CLAUDE_CONFIG_DIR/settings.json" > "$S/x" \
     && mv "$S/x" "$CLAUDE_CONFIG_DIR/settings.json"
 th_run at check
 assert_contains "an open Claude session with no folder" "$TH_OUT" "no folder data/sessions/u-unknown/"
 assert_not_contains "a claude -p session needs no last_seen.json" "$TH_OUT" "u-batch"
+assert_not_contains "an SDK process (the Remote Control bridge) needs no folder" "$TH_OUT" "u-sdk"
 assert_contains "the statusLine not chained" "$TH_OUT" "statusLine in"
 assert_contains "a hook missing" "$TH_OUT" "hook SessionEnd not registered"
 assert_not_contains "...the other one is there" "$TH_OUT" "hook SessionStart not registered"

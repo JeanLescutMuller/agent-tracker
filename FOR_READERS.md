@@ -61,8 +61,8 @@ Written only by `agent-tracker` (`src/agent_tracker.py`; why: `doc/design.md` §
 | File | Written by, when | One line or file = |
 |---|---|---|
 | `data/sessions/<uuid>/last_seen.json` | `agent-tracker tick` (the statusline, every 10 s + each message), rewritten only when a field other than `ts`/`dt` changed, or once a minute | where the Claude session runs now: the file below |
-| `data/sessions/<uuid>/lifecycle.jsonl` | `agent-tracker hook start\|end` (SessionStart, SessionEnd), one appended line < 512 bytes | one start (startup, resume, clear, compact) or one end |
-| `data/claude/quota_latest.json` | `tick` (statusline readings) and `claude_quota_api_poller.py` (after each run: its own reading or one the sync brought), only when fresher (larger `ts`) | the account's freshest reading |
+| `data/sessions/<uuid>/lifecycle.jsonl` | `agent-tracker hook start\|end` (SessionStart, SessionEnd), one appended line < 512 bytes; never for `claude -p` or an SDK process (the Remote Control bridge) since 2026-11-07 | one start (startup, resume, clear, compact) or one end |
+| `data/claude/quota_latest.json` | `tick` (statusline readings) and `claude_quota_api_poller.py` (after each run: its own reading or one the sync brought), only when fresher (larger `ts`, or the same `ts` with other values) | the account's freshest reading |
 | `data/codex/quota_latest.json` | `codex_quota_api_poller.py`, after each run, when fresher | the same, for Codex |
 
 ```text
