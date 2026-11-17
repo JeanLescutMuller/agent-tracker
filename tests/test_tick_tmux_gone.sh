@@ -8,6 +8,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 S=$(mktemp -d); SOCK=$(mktemp -d /tmp/att-XXXX)/s     # sockets must stay under ~104 characters
 unset TMUX TMUX_PANE CLAUDE_CODE_SESSION_ID
+mkdir -p "$S/bin"; printf '#!/bin/bash\nexit 1\n' > "$S/bin/osascript"; chmod +x "$S/bin/osascript"
+export PATH="$S/bin:$PATH"   # tick starts the terminal snapshot: a fake osascript, never the user's iTerm2
 export HOME="$S/home" CLAUDE_CONFIG_DIR="$S/home/.claude" AGENT_TRACKER_HOME="$S/home/opt/agent-tracker" JR_MACHINE_NAME=test-machine
 mkdir -p "$CLAUDE_CONFIG_DIR/sessions" "$AGENT_TRACKER_HOME/data/sessions"
 PASS=0; FAIL=0

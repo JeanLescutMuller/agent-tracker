@@ -9,6 +9,12 @@ set -uo pipefail
 # the tmux server of the shell running the tests (TMUX, TMUX_PANE: the user's
 # live Claude sessions), not a Claude config or a runtime. Tests set their own.
 unset TMUX TMUX_PANE CLAUDE_CONFIG_DIR AGENT_TRACKER_HOME AGENT_USAGE_TRACKER_RUNTIME AGENT_TRACKER_BOOT_TS
+# Nor the user's iTerm2: `agent-tracker tick` starts the terminal snapshot, which asks iTerm2 through osascript.
+# A fake osascript first on PATH prints the file $TH_FAKE_ITERM (the snapshot's iTerm2 rows), or fails.
+_th_bin="$(mktemp -d "${TMPDIR:-/tmp}/th-bin.XXXXXX")"
+printf '#!/bin/bash\ncat >/dev/null\n[ -n "${TH_FAKE_ITERM:-}" ] && cat "$TH_FAKE_ITERM"\n' > "$_th_bin/osascript"
+chmod +x "$_th_bin/osascript"
+export PATH="$_th_bin:$PATH"
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$TESTS_DIR/.." && pwd)"
 source "$REPO_ROOT/utils.sh"

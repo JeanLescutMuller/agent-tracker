@@ -64,6 +64,7 @@ Written only by `agent-tracker` (`src/agent_tracker.py`; why: `doc/design.md` §
 | `data/sessions/<uuid>/lifecycle.jsonl` | `agent-tracker hook start\|end` (SessionStart, SessionEnd), one appended line < 512 bytes; never for `claude -p` or an SDK process (the Remote Control bridge) since 2026-11-07 | one start (startup, resume, clear, compact) or one end |
 | `data/claude/quota_latest.json` | `tick` (statusline readings) and `claude_quota_api_poller.py` (after each run: its own reading or one the sync brought), only when fresher (larger `ts`, or the same `ts` with other values) | the account's freshest reading |
 | `data/codex/quota_latest.json` | `codex_quota_api_poller.py`, after each run, when fresher | the same, for Codex |
+| `data/snapshots/<boot_ts>.tsv` (since 2026-11-17) | `src/terminal_snapshot.sh`, started in the background by `tick` at most once a minute (so only while a Claude session runs); rewritten whole only when its content changed | the terminal layout of that boot: one row per tmux pane, tmux client and iTerm2 tab |
 
 ```text
 last_seen.json   {"ts":1794051573,"dt":"2026-11-07T11:39:33Z","agent":"claude","machine":"chan-lescut-macbook-pro","boot_ts":1794046382,
@@ -76,6 +77,10 @@ lifecycle.jsonl  {"ts":…,"dt":"…","event":"start","source":"startup","agent"
                  {"ts":…,"dt":"…","event":"end","reason":"exit","pid":4607}
 quota_latest     {"ts":1794051573,"dt":"…","source":"statusline","machine":"chan-lescut-macbook-pro",
                   "five_hour":{"used_percentage":55,"resets_at":1788091200},"seven_day":{"used_percentage":70,"resets_at":1788307200}}
+snapshots/<boot_ts>.tsv   tab-separated, no header; ts and dt first (when that part was read: the iterm rows may be older)
+                 ts  dt  pane    <tmux session> <window index> <pane index> <pane_id> <command> <pane folder> <window_layout> <window name>
+                 ts  dt  client  <tty> <tmux session>
+                 ts  dt  iterm   <window position, 1 = front> <window id> <tab position> <tty> <bounds x1,y1,x2,y2>
 ```
 
 | # | Rule | Why |
@@ -87,6 +92,7 @@ quota_latest     {"ts":1794051573,"dt":"…","source":"statusline","machine":"ch
 | 15 | A pane is named by `pane_id` (`%id`), stable while tmux runs; `pane` (`session:window.pane`) was true when written: resolve `pane_id` through tmux for the place now (`agent-tracker now` does) | windows are renamed, moved |
 | 16 | `quota_latest.json`: apply rule 8 (a window whose `resets_at` has passed is at 0%); a window may be `null`; `ts` is when the reading was true (the statusline's: the session's last API response) | the file is the reading, not a view |
 | 17 | `last_seen.json`'s `ts` is at most ~70 s old while its statusline runs (10 s ticks, a rewrite at least once a minute): "on screen" = younger than 90 s; older than 2 min = not ticking | `check` and the quota jobs use these thresholds |
+| 18 | Snapshot: an iTerm2 tab shows the tmux session whose `client` row has the same tty; a pane's Claude session is the one whose `last_seen.json` (or start line) of that boot has the same `pane_id`, when the pane's `<command>` (its foreground command) was not a shell: Claude Code shows as its version (`2.1.326`). The `pane` rows are at most ~1 min old while a Claude session ran; the `iterm` rows up to 10 min for a dragged tab (opened or closed tabs: ~1 min). The window name is last: it may hold a tab | iTerm2 knows ttys, not tmux sessions; asking iTerm2 costs ≈ 70 ms of CPU |
 
 `agent-tracker now --json` (the open Claude sessions of the current boot, computed when asked: nothing stored) prints a JSON array, one object per Claude session, with exactly these keys, in this order:
 

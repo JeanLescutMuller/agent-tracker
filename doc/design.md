@@ -83,6 +83,7 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 │   └── aggregates/                 <machine>.db (3): this machine's own; on the VM also chan-lescut-macbook-pro.db
 ├── data/codex/                     Codex readings and turns (§13); quota_latest.json (its freshest reading)
 ├── data/sessions/<uuid>/           last_seen.json, lifecycle.jsonl: where each Claude session runs, its starts and ends (§14)
+├── data/snapshots/                <boot_ts>.tsv: the terminal snapshot (tmux + iTerm2), for `ares tmux` (§14); .last_run
 ├── data/_archive/                  copies kept by the migrations (the old push copies included), and their log
 ├── state/                          sync/claude_quotas.json (Mac), push/watermarks.json (Mac), transcript_reader/ (Codex offsets)
 ├── logs/                           otel-receiver.{log,err}; tick-errors.log, hook-errors.log (agent-tracker's failures);
@@ -418,7 +419,9 @@ The two facts about a Claude session that nobody else keeps and a crash would lo
 Claude Code ──statusLine, every 10 s──▶ agent-tracker tick ──stdout (unchanged)──▶ display (agent-statusline)
                                           ├─▶ data/sessions/<uuid>/last_seen.json   (on a change, or once a minute)
                                           ├─▶ statusline_usage.store ─▶ gates 1, 2  (as the old reader did)
-                                          └─▶ data/claude/quota_latest.json         (when fresher)
+                                          ├─▶ data/claude/quota_latest.json         (when fresher)
+                                          └─▶ terminal_snapshot.sh, in the background, at most once a minute
+                                                ─▶ data/snapshots/<boot_ts>.tsv (tmux + iTerm2, only when changed)
             ──SessionStart / SessionEnd──▶ agent-tracker hook start|end ─▶ data/sessions/<uuid>/lifecycle.jsonl
 claude-quota.sh, codex poller ──▶ last-seen-age (is a statusline on screen?) ; after each run ─▶ quota_latest.json
 the user ──▶ agent-tracker now (open Claude sessions of this boot) · agent-tracker check (is every writer writing?)
@@ -427,6 +430,7 @@ the user ──▶ agent-tracker now (open Claude sessions of this boot) · agen
 | Command | Reads | Writes | Measured |
 |---|---|---|---|
 | `tick` | stdin; `tmux display -p` for `$TMUX_PANE`; its parent processes (libproc / `/proc`) up to the first with `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`; the transcript's last 256 KB | `last_seen.json`, the usage rows, `quota_latest.json`; failures `logs/tick-errors.log`, exit 0 | median 42 ms in a tmux pane, 36 ms outside (2026-11-07, Mac, 20 ticks, usage recording included); budget 150 ms |
+| `terminal_snapshot.sh` (started by `tick`) | `tmux list-panes -a`, `tmux list-clients`; iTerm2 (one osascript, 3 Apple events) only when the tmux clients changed or its rows are ≥ 600 s old | `data/snapshots/<boot_ts>.tsv`, temp + rename, only when changed | tmux part ≈ 8 ms CPU, iTerm2 part ≈ 70 ms CPU (2026-11-17, Mac, 9 tabs); ≈ 25 s CPU a day |
 | `hook start\|end` | stdin; `$TMUX_PANE`; the parent processes | one line < 512 bytes, `O_APPEND`, one write; prints nothing | 200 concurrent appends, 200 whole lines (test) |
 | `now [--pane %id] [--uuid U] [--json]` | the session folders, `ps`-free liveness (pid + start time), `tmux list-panes`, `$CLAUDE_CONFIG_DIR/sessions/<pid>.json`, the transcripts' ends | nothing | — |
 | `check` | `$CLAUDE_CONFIG_DIR/sessions/*.json`, the session folders, `$CLAUDE_CONFIG_DIR/settings.json` | nothing; exit 1 on a problem | — |

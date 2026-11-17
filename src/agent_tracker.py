@@ -11,7 +11,9 @@ the file formats are the contract of FOR_READERS.md §4.
       rename, only if a field other than ts/dt changed or ts is >= 60 s old),
       the usage recording (statusline_usage.store: the gates' databases), and
       data/claude/quota_latest.json from the payload's rate_limits when that
-      reading is fresher. Never fails: any error -> logs/tick-errors.log, exit 0.
+      reading is fresher; at most once a minute, starts the terminal snapshot
+      in the background (src/terminal_snapshot.sh -> data/snapshots/<boot_ts>.tsv,
+      not waited for). Never fails: any error -> logs/tick-errors.log, exit 0.
   agent-tracker hook start|end [--agent claude|codex]
       stdin: the SessionStart / SessionEnd hook JSON. Appends one line (< 512
       bytes, one write) to data/sessions/<uuid>/lifecycle.jsonl. Prints
@@ -58,6 +60,7 @@ REWRITE_AFTER_S = 60       # last_seen.json: rewritten at least this often while
 STALE_AFTER_S = 120        # check: a last_seen.json older than this is not being written
 TAIL_BYTES = 262144        # the end of a transcript read for the last prompt
 NEVER = 999999999          # last-seen-age when nothing was ever seen
+SNAPSHOT_EVERY_S = 60      # terminal snapshot: started by a tick at most this often (any Claude session's tick)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -318,6 +321,22 @@ def panes_now() -> dict:
             d_out[pane_id] = {"tmux_session": session, "window_index": int(window_index),
                               "pane_index": int(pane_index), "pane": f"{session}:{window_index}.{pane_index}"}
     return d_out
+
+
+def maybe_snapshot() -> None:
+    """Starts src/terminal_snapshot.sh in the background (never waited for) when the last start is
+    >= SNAPSHOT_EVERY_S old: data/snapshots/.last_run, touched first, so the other ticks skip it."""
+    stamp = HOME / "data" / "snapshots" / ".last_run"
+    try:
+        if time.time() - stamp.stat().st_mtime < SNAPSHOT_EVERY_S:
+            return
+    except FileNotFoundError:
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.touch()
+    import subprocess
+    script = Path(os.path.realpath(__file__)).parent / "terminal_snapshot.sh"
+    subprocess.Popen(["/bin/bash", str(script), str(HOME), str(boot_ts())], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 # ---------------------------------------------------------------- quota_latest.json
@@ -715,6 +734,10 @@ def cmd_tick(agent: str) -> int:
         write_last_seen(d_payload, agent)
     except Exception:
         log_error("tick", "writing last_seen.json")
+    try:
+        maybe_snapshot()
+    except Exception:
+        log_error("tick", "starting the terminal snapshot")
     if agent != "claude":
         return 0
     try:

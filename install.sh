@@ -12,6 +12,7 @@
 #   ~/.local/bin/agent-tracker; its first line is this machine's python with
 #   -S and its MACHINE_NAME is filled in, as for statusline_payload_reader.py
 #   (the compatibility wrapper the old statusline still runs);
+# - src/terminal_snapshot.sh: the terminal snapshot (tmux + iTerm2), started by `agent-tracker tick`;
 # - the jobs' job-runner entrypoints (<job>.sh, from jobs/), their dashboard
 #   settings (<job>.conf, given to job-runner's dashboard by put-conf.sh) and one trigger
 #   each, com.jeanlescut.agent-tracker.<job>: claude-quota (60s tick),
@@ -203,6 +204,8 @@ for f in "$SCRIPT_DIR"/src/*.py; do
     fi
     _deploy "$f" "$RUNTIME/src/$(basename "$f")"
 done
+# The terminal snapshot, started in the background by `agent-tracker tick` (FOR_READERS.md §4)
+_deploy "$SCRIPT_DIR/src/terminal_snapshot.sh" "$RUNTIME/src/terminal_snapshot.sh"
 mkdir -p "$BIN_DIR"
 if [ "$(readlink "$BIN_DIR/agent-tracker" 2>/dev/null)" = "$RUNTIME/src/agent_tracker.py" ]; then
     ok "$BIN_DIR/agent-tracker"
