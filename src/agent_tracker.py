@@ -335,8 +335,12 @@ def maybe_snapshot() -> None:
     stamp.touch()
     import subprocess
     script = Path(os.path.realpath(__file__)).parent / "terminal_snapshot.sh"
-    subprocess.Popen(["/bin/bash", str(script), str(HOME), str(boot_ts())], stdin=subprocess.DEVNULL,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    # Double fork: a bash that puts the script in the background and exits at once (waited for, ~3 ms), so the
+    # script's parent is init, not this tick: Claude Code kills the status line command's process tree when it ends
+    # (2026-11-17: a direct child never wrote its file).
+    subprocess.run(["/bin/bash", "-c", '"$0" "$@" &', "/bin/bash", str(script), str(HOME), str(boot_ts())],
+                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   start_new_session=True, timeout=5)
 
 
 # ---------------------------------------------------------------- quota_latest.json
