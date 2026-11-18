@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""On the VM: receives the Category 3 rows another machine's
+"""On the central (the NAS; the VM until 2026-11): receives the Category 3 rows another machine's
 push_to_central.py sends - its `slots`, JSON lines on stdin, over ssh - and
 hands them to the gate of that machine's own file (doc/design.md §6.4):
     ~/opt/agent-tracker/data/claude/aggregates/<machine>.db

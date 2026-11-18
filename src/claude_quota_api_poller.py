@@ -24,13 +24,13 @@ machine only - 429s are counted per login token, i.e. per machine
 (doc/upstream.md §3.5) - (exit 75, "retry-after N" ending the last
 line). One start = at most one attempt.
 
-The MacBook also runs the 2-min sync of the quota readings with the VM
-(--sync-with=H-Frank-1 --sync-every=110; the VM cannot reach the Mac, so the
+The MacBook also runs the 2-min sync of the quota readings with the central, the NAS
+(--sync-with=babisnas-tailscale --sync-every=110; the VM H-Frank-1 until 2026-11; the central cannot reach the Mac, so the
 Mac does both directions, doc/design.md §3.3), before deciding: one
-ssh call runs the VM's gate (ingest_account_quota.py --sync-from), which
+ssh call runs the central's gate (ingest_account_quota.py --sync-from), which
 stores the Mac's own new readings and answers with its own. Only a
 machine's own readings travel (`machine`); the two watermarks (the last
-rowid sent from here, the last asked from the VM) are in
+rowid sent from here, the last asked from the central) are in
 state/sync/claude_quotas.json and advance only once both sides stored
 everything. The VM unreachable: the sync waits for the next run and the
 summary says so; it becomes a failure (exit 1) once the last successful
@@ -70,8 +70,8 @@ KEYCHAIN_SERVICE = "Claude Code-credentials"
 # Where Claude Code keeps the same credential blob on Linux (no Keychain).
 CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
 
-# The VM's account gate, run over ssh (a non-login shell: python3 is
-# /usr/bin/python3 on the VM, as for push_to_central.py).
+# The central's account gate, run over ssh (a non-login shell: python3 is
+# /usr/bin/python3 on the NAS, as for push_to_central.py).
 SYNC_COMMAND = "python3 ~/opt/agent-tracker/src/ingest_account_quota.py --agent claude --sync-from={me} --after={after}"
 SYNC_STATE = usage_db.RUNTIME_DIR / "state" / "sync" / "claude_quotas.json"
 SYNC_TIMEOUT_S = 30

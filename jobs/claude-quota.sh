@@ -2,10 +2,11 @@
 # ~/opt/agent-tracker/claude-quota.sh: job agent-tracker.claude-quota.
 # Requirements (doc/design.md §3.3, §3.4):
 #   - one reading of the Claude account's quota (GET /api/oauth/usage) when the account's newest reading, any
-#     source, any machine, is too old; Mac and VM, the same file, tick every 60 s
-#   - the Mac syncs the readings with the VM every 2 min, both ways, before deciding (the VM cannot reach the Mac)
+#     source, any machine, is too old; Mac and NAS, the same file, tick every 60 s
+#   - the Mac syncs the readings with the central, the NAS (the VM until 2026-11), every 2 min, both ways, before
+#     deciding (the central cannot reach the Mac)
 #   - thresholds: status line on screen here (newest data/sessions/*/last_seen.json of a Claude session < 90 s old,
-#     written by `agent-tracker tick`): 110 s (Mac) / 290 s (VM); idle: 300 s / 480 s.
+#     written by `agent-tracker tick`): 110 s (Mac) / 290 s (the NAS, any other); idle: 300 s / 480 s.
 #     The VM waits for the Mac's threshold + the 2-min sync + a tick, so it polls only while the Mac sleeps
 #   - VM unreachable: the Mac goes on alone; a sync failing for 30 min is a failure
 #   - 429: wait its Retry-After, on this machine only (WAIT, not WAIT … all): the endpoint counts per login token,

@@ -3,10 +3,11 @@
 # Requirements (doc/design.md §6, §8):
 #   - Claude transcripts -> data/claude/intermediary.db (each request once) -> the final 5-min slots ->
 #     data/claude/aggregates/<machine>.db;
-#     Codex session files -> data/codex/sessions_usages.db as before; Mac and VM, each for itself
-#   - the Mac then sends its new slots to the VM (aggregates/chan-lescut-macbook-pro.db there); the VM sends nothing.
-#     The VM unreachable: a failure, the slots go with the next run
-#   - every 5 min (Mac StartInterval 300; VM OnUnitActiveSec=5min); incremental (a byte offset per file)
+#     Codex session files -> data/codex/sessions_usages.db as before; Mac and the NAS, each for itself
+#   - the Mac then sends its new slots to the central, the NAS (aggregates/chan-lescut-macbook-pro.db there; the VM
+#     H-Frank-1 until 2026-11); the central sends nothing.
+#     The central unreachable: a failure, the slots go with the next run
+#   - every 5 min (Mac StartInterval 300; NAS OnUnitActiveSec=5min); incremental (a byte offset per file)
 #   - timeout 5 min, as long as the tick: no overlap, two runs would read the same bytes (claim, lockfile)
 #   - summary: its last line ("slots: 12 written (… → …), 40 requests · sent 12 to babisnas-tailscale")
 . ~/opt/job-runner/lib.sh

@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """Sends this machine's new Category 3 rows - the `slots` of
-data/claude/aggregates/<machine>.db - to the VM (H-Frank-1), into the file
+data/claude/aggregates/<machine>.db - to the central, the NAS (babisnas-tailscale; the VM H-Frank-1 until 2026-11), into the file
 of the same name there (doc/design.md §6.4):
     ~/opt/agent-tracker/data/claude/aggregates/<machine>.db
 Run by the Mac's `aggregates` job right after it writes the slots
-(aggregate_slots.py --send-to); the VM sends nothing (its slots are already
+(aggregate_slots.py --send-to); the central sends nothing (its slots are already
 there). Categories 1 and 2 never go this way: quota readings have their own
 2-min sync, and a machine's raw rows never leave it (until 2026-10-10, this
 sent every row of every database; those copies are in data/_archive/).
 
-Push only: the VM never pulls (the Mac sleeps, goes offline, sits behind
+Push only: the central never pulls (the Mac sleeps, goes offline, sits behind
 NAT). Each call sends the slots added since the last confirmed send (rowid
 above the watermark "claude/slots" in state/push/watermarks.json), in chunks,
 as JSON lines on the stdin of
     ssh <central> python3 ~/opt/agent-tracker/src/receive_from_machine.py --machine <this machine>
 which hands them to the same gate there (ingest_aggregates.py). A chunk's
-watermark advances only after the VM confirmed it; a re-sent slot is a
+watermark advances only after the central confirmed it; a re-sent slot is a
 no-op there. So an offline run, a crash or a dropped connection just means
 the slots go on the next run. Reads only; the file is opened query_only.
-A full reset of the VM's copy: delete it there, then set "claude/slots" to 0.
+A full reset of the central's copy: delete it there, then set "claude/slots" to 0.
 
 Usage: python3 push_to_central.py [--central HOST]   (default: $AGENT_USAGE_TRACKER_CENTRAL or babisnas-tailscale, the NAS since 2026-11)
 """
@@ -37,7 +37,7 @@ WATERMARKS_FILE = usage_db.RUNTIME_DIR / "state" / "push" / "watermarks.json"
 WATERMARK_KEY = "claude/slots"
 CHUNK_ROWS = 20000
 SEND_TIMEOUT_S = 240  # inside the aggregates job's 5 min
-# On the VM, python3 is /usr/bin/python3; ssh runs a non-login shell.
+# On the central (the NAS), python3 is /usr/bin/python3; ssh runs a non-login shell.
 REMOTE_COMMAND = "python3 ~/opt/agent-tracker/src/receive_from_machine.py --machine {machine}"
 
 
@@ -53,7 +53,7 @@ def send(central: str, machine: str, payload: bytes) -> dict:
 
 def send_slots(central: str) -> str:
     """Sends every slot not sent yet; returns what to say. Raises (after
-    saving the watermark of the chunks already confirmed) when the VM
+    saving the watermark of the chunks already confirmed) when the central
     cannot be reached or refused a chunk."""
     machine = usage_db.machine_name()
     try:
