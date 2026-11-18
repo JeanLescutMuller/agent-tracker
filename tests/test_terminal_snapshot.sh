@@ -79,4 +79,11 @@ python3 "$REPO_ROOT/src/agent_tracker.py" tick < "$S/p.json" > /dev/null
 for i in $(seq 1 50); do [ -s "$OUT" ] && break; sleep 0.1; done
 assert_file_exists "a stamp older than 60 s: started again" "$OUT"
 
+section "tmux only in ~/.local/bin, not on PATH (the NAS's, from a service): still found"
+mkdir -p "$HOME/.local/bin"; ln -sf "$(command -v tmux)" "$HOME/.local/bin/tmux"
+tmux new-session -d -s snap-path -x 100 -y 30 "sleep 600"
+rm -f "$OUT"
+PATH=/usr/bin:/bin bash "$SNAP" "$S/rt" 1794925607
+assert_contains "snapshot written" "$(kind pane)" "snap-path"
+
 harness_summary

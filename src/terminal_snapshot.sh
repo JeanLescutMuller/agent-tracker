@@ -15,6 +15,9 @@
 # so it runs only when the tmux clients changed (a tab opened or closed) or its rows are >= 600 s old (a dragged tab).
 # Never fails loudly: any error leaves the previous file as it was.
 RUNTIME=$1 BOOT_TS=$2
+# tmux installed without root lives in ~/.local/bin (the NAS, 2026-11-18); a tick from a service has systemd's
+# PATH, without it.
+PATH="$PATH:$HOME/.local/bin"
 ITERM_EVERY_S=${AGENT_TRACKER_ITERM_EVERY_S:-600}
 [[ $BOOT_TS =~ ^[0-9]+$ ]] || exit 0
 dir=$RUNTIME/data/snapshots out=$RUNTIME/data/snapshots/$BOOT_TS.tsv
