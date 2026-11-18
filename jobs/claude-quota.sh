@@ -18,7 +18,7 @@
 #   - alert: red after 30 min without a success (dashboard settings on the VM, DESIGN §11)
 . ~/opt/job-runner/lib.sh                # this machine's own pending WAIT: skipped right here
 limit=290 idle=480 sync=
-[ $JR_MACHINE_NAME = chan-lescut-macbook-pro ] && limit=110 idle=300 sync="--sync-with=H-Frank-1 --sync-every=110"
+[ $JR_MACHINE_NAME = chan-lescut-macbook-pro ] && limit=110 idle=300 sync="--sync-with=babisnas-tailscale --sync-every=110"
 [ "$(python3 src/agent_tracker.py last-seen-age --agent claude 2>/dev/null || echo 999999999)" -lt 90 ] || limit=$idle   # a status line on screen here
 
 # The poller: sync when due (Mac), then a poll only if the newest reading is $limit s old or more

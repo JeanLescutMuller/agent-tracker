@@ -20,7 +20,7 @@ no-op there. So an offline run, a crash or a dropped connection just means
 the slots go on the next run. Reads only; the file is opened query_only.
 A full reset of the VM's copy: delete it there, then set "claude/slots" to 0.
 
-Usage: python3 push_to_central.py [--central HOST]   (default: $AGENT_USAGE_TRACKER_CENTRAL or H-Frank-1)
+Usage: python3 push_to_central.py [--central HOST]   (default: $AGENT_USAGE_TRACKER_CENTRAL or babisnas-tailscale, the NAS since 2026-11)
 """
 import argparse
 import json
@@ -32,7 +32,7 @@ import time
 import ingest_aggregates
 import usage_db
 
-CENTRAL_DEFAULT = os.environ.get("AGENT_USAGE_TRACKER_CENTRAL") or "H-Frank-1"
+CENTRAL_DEFAULT = os.environ.get("AGENT_USAGE_TRACKER_CENTRAL") or "babisnas-tailscale"
 WATERMARKS_FILE = usage_db.RUNTIME_DIR / "state" / "push" / "watermarks.json"
 WATERMARK_KEY = "claude/slots"
 CHUNK_ROWS = 20000
