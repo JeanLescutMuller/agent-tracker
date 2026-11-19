@@ -322,6 +322,8 @@ def main(argv: list[str] | None = None) -> None:
     except Exception as exc:
         print(f"accounts table not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
     d_waits = read_waits()
+    # An account folder not logged in yet (no organization uuid) has no token to read: left out, not a failed attempt per minute.
+    l_accounts = [a for a in l_accounts if a["is_main"] or a["org_uuid"]]
     l_results = [(a, *poll_account(a, args.if_older_than, now, d_waits)) for a in l_accounts]
     # A 429 wait kept here: another account's always (the job's WAIT cannot hold one account only); the main
     # account's only when another account was read in this run (the run then succeeds, so the job's own WAIT,

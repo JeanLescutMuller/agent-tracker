@@ -184,6 +184,13 @@ assert_match "freshness per account: all fresh, exit 10" "$(multi "$OKA" "$OKB" 
 python3 -c "import sqlite3; db = sqlite3.connect('$MA/rt/data/claude/account_quotas.db'); db.execute(\"UPDATE account_quotas SET ts = ts - 1000 WHERE account = '$UB'\"); db.commit()"
 assert_eq "b's reading is old, a's is young: only b polled (a skipped: exit 0 because b was read)" "0" "$(multi "$OKA" "$OKB" --if-older-than=500 | cut -d' ' -f1)"
 
+section "an account folder not logged in yet is not polled"
+mkdir -p "$MA/home/.claude/account-c"; echo '{}' > "$MA/home/.claude/account-c/.claude.json"
+python3 -c "import sqlite3; db = sqlite3.connect('$MA/rt/data/claude/account_quotas.db'); db.execute('DELETE FROM poll_errors'); db.commit()"
+multi "$OKA" "$OKB" > /dev/null
+assert_eq "no failed attempt, no row for c" "0" "$(mq "SELECT COUNT(*) FROM poll_errors WHERE raw LIKE '%account_name\": \"c%'")"
+rm -r "$MA/home/.claude/account-c"
+
 section "--sync-with: each machine's own readings, both ways, in one ssh call"
 # The VM's own reading (1 s after the Mac's, so it is the newest), and one from before 2026-10-10
 # (no machine in raw; labelled by the migration).
