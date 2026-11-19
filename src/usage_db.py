@@ -38,10 +38,12 @@ AGENTS = ("claude", "codex")
 # Bumped when a schema change needs a migration; 0 means "not created yet".
 # 2: account_quotas.machine and its place in `latest` (2026-10, adhoc_quotas_analysis/migrate_to_target.py cat1-machine).
 # 3: `latest` applies the reset rule (2026-10, migrate_to_target.py view-latest).
-SCHEMA_VERSION = 3
+# 4: account_quotas.account, the `accounts` table, `latest` = the main account, `latest_by_account` (2026-11-19,
+#    migrate_to_target.py accounts-v4); telemetry.account (sessions_usages.db).
+SCHEMA_VERSION = 4
 BUSY_TIMEOUT_MS = 10_000
 
-ACCOUNT_SCHEMA = """
+_ACCOUNT_TABLES = """
 CREATE TABLE account_quotas (
     ts INTEGER NOT NULL,              -- when the reading was true: observed_at (push), request time (poll)
     dt TEXT NOT NULL,
@@ -54,12 +56,14 @@ CREATE TABLE account_quotas (
     written_ts INTEGER NOT NULL,      -- when the row was written (the old JSONL `ts`)
     raw TEXT NOT NULL,                -- the row in its JSONL shape, verbatim
     row_hash TEXT NOT NULL UNIQUE,
-    machine TEXT                      -- the machine that took the reading (also in raw since 2026-10-10); NULL: unknown
+    machine TEXT,                     -- the machine that took the reading (also in raw since 2026-10-10); NULL: unknown
+    account TEXT                      -- the Claude account's organization uuid (also in raw since 2026-11-19); NULL: before = the main account
 );
 CREATE INDEX account_quotas_ts ON account_quotas(ts);
 CREATE INDEX account_quotas_written ON account_quotas(written_ts);
 CREATE INDEX account_quotas_source_written ON account_quotas(source, written_ts);
 CREATE INDEX account_quotas_session ON account_quotas(observed_by_session, source);
+CREATE INDEX account_quotas_account ON account_quotas(account, ts);
 CREATE TABLE poll_errors (
     ts INTEGER NOT NULL,              -- when the attempt was made
     dt TEXT NOT NULL,
@@ -72,10 +76,23 @@ CREATE TABLE poll_errors (
     row_hash TEXT NOT NULL UNIQUE
 );
 CREATE INDEX poll_errors_source_ts ON poll_errors(source, ts);
--- The freshest reading of the account, whatever wrote it, on any machine,
--- with the reset rule (doc/design.md §3.2): a window whose reset
--- time has passed is at 0% and its reset unknown (NULL), until a newer
--- reading - readings stop while nobody uses Claude Code.
+"""
+
+# The Claude accounts of THIS machine (2026-11-19): written by the poller through the gate; read by `latest`.
+ACCOUNTS_TABLE = """
+CREATE TABLE accounts (
+    name TEXT PRIMARY KEY,            -- the local name: a (= ~/.claude, the main account), b, ... (CLAUDE_ACCOUNT)
+    org_uuid TEXT NOT NULL,           -- its organization uuid: the account's id on every machine
+    config_dir TEXT NOT NULL,
+    is_main INTEGER NOT NULL,         -- 1 for the account a: what every reader means by "the account"
+    seen_ts INTEGER NOT NULL
+)"""
+
+# The account's freshest reading, whatever wrote it, on any machine, with the reset rule (doc/design.md §3.2):
+# a window whose reset time has passed is at 0% and its reset unknown (NULL), until a newer reading - readings stop
+# while nobody uses Claude Code. The MAIN account only (2026-11-19: every reader means account a); the other
+# accounts: `latest_by_account`.
+LATEST_VIEW = """
 CREATE VIEW latest AS
     SELECT ts, dt, source, machine,
            CASE WHEN five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE five_hour_pct END AS five_hour_pct,
@@ -83,10 +100,28 @@ CREATE VIEW latest AS
            CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE seven_day_pct END AS seven_day_pct,
            CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE seven_day_resets_ts END AS seven_day_resets_ts
     FROM (SELECT * FROM account_quotas
-          WHERE five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL
+          WHERE (five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL)
+            AND (account IS NULL OR account IS (SELECT org_uuid FROM accounts WHERE is_main = 1))
           ORDER BY ts DESC, rowid DESC
-          LIMIT 1);
-"""
+          LIMIT 1)"""
+
+# One row per account (NULL account = the main one), same reset rule; `name` is NULL for an account this machine
+# does not know (a reading the sync brought from another machine).
+LATEST_BY_ACCOUNT_VIEW = """
+CREATE VIEW latest_by_account AS
+    SELECT r.acct AS account, (SELECT name FROM accounts a WHERE a.org_uuid = r.acct) AS name,
+           r.ts AS ts, r.dt AS dt, r.source AS source, r.machine AS machine,
+           CASE WHEN r.five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE r.five_hour_pct END AS five_hour_pct,
+           CASE WHEN r.five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE r.five_hour_resets_ts END AS five_hour_resets_ts,
+           CASE WHEN r.seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE r.seven_day_pct END AS seven_day_pct,
+           CASE WHEN r.seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE r.seven_day_resets_ts END AS seven_day_resets_ts
+    FROM (SELECT *, COALESCE(account, (SELECT org_uuid FROM accounts WHERE is_main = 1)) AS acct,
+                 ROW_NUMBER() OVER (PARTITION BY COALESCE(account, (SELECT org_uuid FROM accounts WHERE is_main = 1))
+                                    ORDER BY ts DESC, rowid DESC) AS rn
+          FROM account_quotas WHERE five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL) r
+    WHERE r.rn = 1"""
+
+ACCOUNT_SCHEMA = _ACCOUNT_TABLES + ACCOUNTS_TABLE + ";\n" + LATEST_VIEW + ";\n" + LATEST_BY_ACCOUNT_VIEW + ";\n"
 
 SESSIONS_SCHEMA = """
 CREATE TABLE session_snapshots (     -- the statusline's per-session cumulative cost and cache statistics
@@ -117,7 +152,8 @@ CREATE TABLE telemetry (             -- Claude Code's own per-request events (OT
     cost_usd REAL,                    -- Claude Code's own list-price figure
     received_ts INTEGER,
     raw TEXT NOT NULL,
-    row_hash TEXT NOT NULL UNIQUE
+    row_hash TEXT NOT NULL UNIQUE,
+    account TEXT                      -- the account's organization uuid (attribute organization.id), since 2026-11-19; NULL before
 );
 CREATE INDEX telemetry_request ON telemetry(request_id);
 CREATE INDEX telemetry_session ON telemetry(session_id);

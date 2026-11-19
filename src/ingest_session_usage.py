@@ -25,6 +25,8 @@ import sys
 
 import usage_db
 
+ACCOUNT_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")   # an organization uuid
+
 # Session ids are plain tokens; "account" is reserved (it was the account
 # file's name when session ids were file names).
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9-]{1,128}$")
@@ -91,15 +93,19 @@ def add_telemetry(db, d_row: dict, raw: str | None = None) -> str:
         value = d_attr.get(key)
         return kind(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
-    cur = db.execute(
-        "INSERT OR IGNORE INTO telemetry (ts, dt, event, session_id, request_id, model, query_source, input_tokens, "
-        "output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, received_ts, raw, row_hash) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (ts, usage_db.iso(ts), d_row.get("event"), session_id if valid_session_id(session_id) else None,
-         d_attr.get("request_id"), d_attr.get("model"), d_attr.get("query_source"),
-         num("input_tokens", int), num("output_tokens", int), num("cache_read_tokens", int),
-         num("cache_creation_tokens", int), num("cost_usd", float), d_row.get("received_at"), raw,
-         usage_db.row_hash(raw)))
+    l_cols = ["ts", "dt", "event", "session_id", "request_id", "model", "query_source", "input_tokens", "output_tokens",
+              "cache_read_tokens", "cache_creation_tokens", "cost_usd", "received_ts", "raw", "row_hash"]
+    l_vals = [ts, usage_db.iso(ts), d_row.get("event"), session_id if valid_session_id(session_id) else None,
+              d_attr.get("request_id"), d_attr.get("model"), d_attr.get("query_source"),
+              num("input_tokens", int), num("output_tokens", int), num("cache_read_tokens", int),
+              num("cache_creation_tokens", int), num("cost_usd", float), d_row.get("received_at"), raw,
+              usage_db.row_hash(raw)]
+    account = d_attr.get("organization.id")        # the account's organization uuid (2026-11-19); only once migrated
+    if isinstance(account, str) and ACCOUNT_RE.fullmatch(account) and \
+            "account" in [r[1] for r in db.execute("PRAGMA table_info(telemetry)")]:
+        l_cols.append("account")
+        l_vals.append(account)
+    cur = db.execute(f"INSERT OR IGNORE INTO telemetry ({', '.join(l_cols)}) VALUES ({','.join('?' * len(l_cols))})", l_vals)
     return "inserted" if cur.rowcount else "duplicate"
 
 

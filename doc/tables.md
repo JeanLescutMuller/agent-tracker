@@ -4,7 +4,7 @@ What each table holds, which collector fills it from which upstream source, and 
 
 Markers: **[verified]** was measured on this machine's data; **[docs]** comes from official documentation.
 
-*Last verified: 2026-11-17 (the terminal snapshot `data/snapshots/<boot_ts>.tsv`: `tests/test_terminal_snapshot.sh`); 2026-11-07 (`quota_latest.json` replaced on a same-`ts` tie with other values; no session folder for `claude -p` / SDK processes: `tests/test_agent_tracker.sh`); 2026-11-07 (the statusline recording moved into `agent-tracker tick`, rows unchanged: `tests/test_agent_tracker.sh`, `tests/test_ingest_claude_statusline.sh`); before that 2026-10-12 (P13 + P14 on both machines: the slots equal a separate count of every request, Mac 3,331 / VM 41, the VM's copy of the Mac's identical). Earlier verifications: `doc/changes.md`.*
+*Last verified: 2026-11-19 (several Claude accounts: `account_quotas.account`, `telemetry.account`, table `accounts`, views `latest` and `latest_by_account`, `quota_latest.<name>.json`: `tests/test_account_gate.sh`, `tests/test_poll_claude.sh`, `tests/test_agent_tracker.sh`, `tests/test_claude_accounts.sh`, `tests/test_migrate_to_target.sh`); 2026-11-17 (the terminal snapshot `data/snapshots/<boot_ts>.tsv`: `tests/test_terminal_snapshot.sh`); 2026-11-07 (`quota_latest.json` replaced on a same-`ts` tie with other values; no session folder for `claude -p` / SDK processes: `tests/test_agent_tracker.sh`); 2026-11-07 (the statusline recording moved into `agent-tracker tick`, rows unchanged: `tests/test_agent_tracker.sh`, `tests/test_ingest_claude_statusline.sh`); before that 2026-10-12 (P13 + P14 on both machines: the slots equal a separate count of every request, Mac 3,331 / VM 41, the VM's copy of the Mac's identical). Earlier verifications: `doc/changes.md`.*
 
 ---
 
@@ -122,7 +122,7 @@ About 89% of account rows **[verified]**. Every render that writes an account ro
 
 ### 3.3 The view `latest`, and the line the reader prints
 
-`latest` is the freshest reading, any source, any machine, with the reset rule applied: `doc/design.md` §3.2 (columns, rule, example). The statusline reader prints it for agent-statusline as six `\034`-separated fields, `five_pct, five_reset, week_pct, week_reset, source, observed_at`: percents rounded (the display does integer arithmetic), a passed reset empty.
+`latest` is the freshest reading **of the main account** (account a: `account` NULL or the uuid of `accounts.is_main`; since 2026-11-19 `account_quotas.account` holds the organization uuid, `latest_by_account` has one row per account, `accounts` is this machine's account list: `doc/design.md` §3.5), any source, any machine, with the reset rule applied: `doc/design.md` §3.2 (columns, rule, example). The statusline reader prints it for agent-statusline as six `\034`-separated fields, `five_pct, five_reset, week_pct, week_reset, source, observed_at`: percents rounded (the display does integer arithmetic), a passed reset empty.
 
 ---
 

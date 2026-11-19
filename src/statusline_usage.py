@@ -8,7 +8,8 @@ payload is the only free, per-render source of Claude's quota percent
 
 store() splits the payload by scope and hands each part to its gate:
   - the quota reading -> ingest_account_quota.py (account_quotas.db),
-    tagged observed_by_session and machine;
+    tagged observed_by_session, machine and account (the session's, claude_accounts.session_account;
+    an unknown account: no reading);
   - the session's cumulative cost, model and prompt_cache statistics ->
     ingest_session_usage.py (sessions_usages.db), only for a plain session id.
 Never a percent in the session part, never a cost in the account part.
@@ -30,6 +31,7 @@ import json
 import time
 from datetime import datetime
 
+import claude_accounts
 import ingest_account_quota
 import ingest_session_usage
 import usage_db
@@ -86,6 +88,7 @@ def store(d_payload: dict) -> int | None:
     if when is None:
         return None
     now = int(time.time())
+    d_acct = claude_accounts.session_account()     # None: an account this machine does not know: no quota reading
     d_common = {"ts": now, "iso": usage_db.iso(now), "source": "claude_statusline", "observed_at": when}
     # The machine that took the reading (since 2026-10-10). The entry point
     # passes JR_MACHINE_NAME, written by install.sh, so no scutil call costs
@@ -104,8 +107,11 @@ def store(d_payload: dict) -> int | None:
         "observed_by_session": text(d_payload.get("session_id")),
         "machine": machine,
     }
-    db = usage_db.open_account("claude")
-    ingest_account_quota.add_row(db, "claude", d_account, json.dumps(d_account, separators=(",", ":")))
+    if d_acct and d_acct["org_uuid"]:
+        d_account["account"] = d_acct["org_uuid"]   # since 2026-11-19; none: the main account, as before
+    if d_acct:
+        db = usage_db.open_account("claude")
+        ingest_account_quota.add_row(db, "claude", d_account, json.dumps(d_account, separators=(",", ":")))
     session_id = d_payload.get("session_id")
     if ingest_session_usage.valid_session_id(session_id):
         cost = (d_payload.get("cost") or {}).get("total_cost_usd")
@@ -119,4 +125,4 @@ def store(d_payload: dict) -> int | None:
             "prompt_cache": d_payload.get("prompt_cache"),
         }
         ingest_session_usage.add_snapshot(usage_db.open_sessions("claude"), session_id, d_session)
-    return when
+    return when if d_acct else None

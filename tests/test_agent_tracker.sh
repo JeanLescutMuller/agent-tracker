@@ -95,7 +95,7 @@ section "hook start in the same pane: one line, nothing printed"
 LC="$DATA/sessions/u1/lifecycle.jsonl"
 assert_eq "printed nothing" "" "$(cat "$S/hook-out-u1")"
 assert_eq "one line" "1" "$(wc -l < "$LC" | tr -d ' ')"
-assert_eq "its keys" "ts dt event source agent machine boot_ts pid pid_start pane_id pane cwd" "$(head -1 "$LC" | jq -r 'keys_unsorted | join(" ")')"
+assert_eq "its keys" "ts dt event source agent machine boot_ts pid pid_start pane_id pane cwd account" "$(head -1 "$LC" | jq -r 'keys_unsorted | join(" ")')"
 assert_eq "event start, source startup, agent claude" "start startup claude" "$(head -1 "$LC" | jq -r '"\(.event) \(.source) \(.agent)"')"
 assert_eq "its pid and pid_start: the fake Claude's" "$PID1 $REAL_START" "$(head -1 "$LC" | jq -r '"\(.pid) \(.pid_start)"')"
 assert_eq "its pane" "$(jqf .pane_id "$SEEN") work:0.0" "$(head -1 "$LC" | jq -r '"\(.pane_id) \(.pane)"')"
@@ -145,6 +145,38 @@ jq -c 'del(.rate_limits) | .session_id = "u9"' "$S/p1.json" > "$S/p_nolimits.jso
 at tick < "$S/p_nolimits.json" > /dev/null
 assert_eq "a payload without rate_limits changes nothing" "1794049200" "$(jqf .ts "$QL")"
 
+section "several Claude accounts (2026-11-19): tick files each session's quota under its own account"
+UA="11111111-1111-4111-8111-111111111111"; UB="22222222-2222-4222-8222-222222222222"
+mkdir -p "$CLAUDE_CONFIG_DIR/account-b" "$DATA/claude"
+python3 -c 'import json, os, sys
+d, ua, ub = sys.argv[1:]     # the cache keys are normalized paths (claude_accounts.norm): a sandbox path may hold "//"
+print(json.dumps({"accounts": {os.path.normpath(d): {"name": "a", "org_uuid": ua}, os.path.normpath(d + "/account-b"): {"name": "b", "org_uuid": ub}}}))' \
+    "$CLAUDE_CONFIG_DIR" "$UA" "$UB" > "$DATA/claude/accounts.json"
+printf '%s\n' '{"type":"assistant","timestamp":"2026-11-07T12:00:00Z"}' > "$S/b.jsonl"
+jq -c '.transcript_path = $t | .session_id = "ub1" | .rate_limits.seven_day.used_percentage = 9' --arg t "$S/b.jsonl" "$S/p1.json" > "$S/p_b.json"
+MAIN_BEFORE="$(cat "$QL")"
+CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR/account-b" at tick < "$S/p_b.json" > /dev/null
+assert_eq "a session on account b: quota_latest.json (the main account's) is untouched" "$MAIN_BEFORE" "$(cat "$QL")"
+QB="$DATA/claude/quota_latest.b.json"; ls "$DATA/claude" >&2; cat "$DATA/../errors.log" 2>/dev/null >&2
+assert_eq "...b has its own file, with its name and uuid" "9 b $UB" "$(jq -r '"\(.seven_day.used_percentage) \(.account_name) \(.account)"' "$QB")"
+printf '%s\n' '{"type":"assistant","timestamp":"2026-11-07T13:00:00Z"}' > "$S/a2.jsonl"
+jq -c '.transcript_path = $t | .session_id = "ua1"' --arg t "$S/a2.jsonl" "$S/p1.json" > "$S/p_a2.json"
+at tick < "$S/p_a2.json" > /dev/null
+assert_eq "...the readings in the database carry their account: b's, a's (default folder), and none before the cache (the main one)" "$UB $UA none" \
+    "$(q account_quotas.db "SELECT (SELECT account FROM account_quotas WHERE observed_by_session = 'ub1') || ' ' || (SELECT account FROM account_quotas WHERE observed_by_session = 'ua1') || ' ' || (SELECT COALESCE(account, 'none') FROM account_quotas WHERE observed_by_session = 'u9' LIMIT 1)")"
+assert_eq "...a's own file is still the main account's (no account keys)" "false" "$(jq -r 'has("account")' "$QL")"
+jq -c '.session_id = "ux" | .transcript_path = $t' --arg t "$S/b.jsonl" "$S/p1.json" > "$S/p_x.json"
+BEFORE_ROWS="$(q account_quotas.db "SELECT COUNT(*) FROM account_quotas")"
+CLAUDE_CONFIG_DIR="$S/home/.claude/account-zz" at tick < "$S/p_x.json" > /dev/null
+assert_eq "an unknown account: no reading stored, no file" "$BEFORE_ROWS missing" \
+    "$(q account_quotas.db "SELECT COUNT(*) FROM account_quotas") $([ -e "$DATA/claude/quota_latest.zz.json" ] && echo there || echo missing)"
+assert_eq "...but its session snapshot is (a session's cost belongs to it)" "1" "$(q sessions_usages.db "SELECT COUNT(*) FROM session_snapshots WHERE session_id = 'ux'")"
+printf '%s' '{"session_id":"ub2","transcript_path":"x","cwd":"/work","hook_event_name":"SessionStart","source":"startup"}' > "$S/hook_b.json"
+mkdir -p "$S/lcdir"
+assert_eq "the SessionStart line names the account (CLAUDE_ACCOUNT; a when unset)" "a" "$(env -u CLAUDE_ACCOUNT python3 -c "
+import sys; sys.path.insert(0, '$REPO_ROOT/src'); import agent_tracker as a
+print(a.os.environ.get('CLAUDE_ACCOUNT') or 'a')")"
+
 section "the quota pollers offer the database's newest reading to quota_latest.json"
 python3 - "$REPO_ROOT/src" <<'PY'
 import sys, json, time
@@ -168,7 +200,7 @@ assert_eq "codex: its own file, same shape" "poller 12 7" \
     "$(jq -r '"\(.source) \(.five_hour.used_percentage) \(.seven_day.used_percentage)"' "$DATA/codex/quota_latest.json")"
 out="$(cd "$REPO_ROOT/src" && JR_MACHINE_NAME=mac python3 -c "
 import sys, claude_quota_api_poller as p
-p.newest_age = lambda now: 5
+p.newest_age = lambda now, *a: 5
 sys.argv = ['x', '--if-older-than=100']
 try:
     p.main()

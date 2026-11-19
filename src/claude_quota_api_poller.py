@@ -36,9 +36,14 @@ everything. The VM unreachable: the sync waits for the next run and the
 summary says so; it becomes a failure (exit 1) once the last successful
 sync is older than SYNC_STALE_S.
 
-After every run, the account's newest reading (any source, any machine) is
-offered to data/claude/quota_latest.json (offer_latest), the one file the
-statusline display reads.
+Several accounts (2026-11-19, claude_accounts.py): every Claude account logged in on this machine is polled with its
+own token, its own freshness (`--if-older-than` is per account) and its own 429 wait (state/sync/claude_quota_wait.json).
+The exit codes follow the main account (a), what the job and its dashboard mean; another account's failure (its login
+not used for 8 h reads 401) is in the summary line, never a failed run. One start = at most one attempt per account.
+
+After every run, each account's newest reading (any source, any machine) is
+offered to its file (offer_latest): the main account's data/claude/quota_latest.json,
+the one file the statusline display reads, another's quota_latest.<name>.json.
 
 Exit codes: 0 a reading, its summary last ("5h 42% · 7d 18%"); 10 fresh
 enough, no poll; 75 a 429; 1 any other failure (401, network..., or a
@@ -62,6 +67,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+import claude_accounts
 import ingest_account_quota
 import usage_db
 
@@ -76,6 +82,8 @@ SYNC_COMMAND = "python3 ~/opt/agent-tracker/src/ingest_account_quota.py --agent 
 SYNC_STATE = usage_db.RUNTIME_DIR / "state" / "sync" / "claude_quotas.json"
 SYNC_TIMEOUT_S = 30
 SYNC_STALE_S = 1800  # a sync failing longer than this fails the job
+# Per account: until when its 429 Retry-After keeps it from being polled {name: epoch} (2026-11-19: several accounts).
+WAIT_STATE = usage_db.RUNTIME_DIR / "state" / "sync" / "claude_quota_wait.json"
 
 # Response headers worth keeping - request-id lets a specific reading be
 # cross-referenced/reported to Anthropic support if a number ever looks
@@ -88,20 +96,21 @@ HEADERS_TO_KEEP = (
 )
 
 
-def fetch_token() -> tuple[str | None, dict | None]:
+def fetch_token(config_dir: str | None = None, is_main: bool = True) -> tuple[str | None, dict | None]:
     """Claude Code itself writes the OAuth token on login: in the macOS
     Keychain under this exact service name, or on Linux in
     ~/.claude/.credentials.json (same JSON) - this is the only place on the
     machine reading it for quota purposes (see the module docstring).
-    Returns (token, d_error); exactly one is non-None."""
+    Returns (token, d_error); exactly one is non-None. `config_dir`/`is_main`: the account whose login to read
+    (default: the main account); another account's login is in its own Keychain item / its folder's .credentials.json."""
     try:
         if sys.platform == "darwin":
             text = subprocess.run(
-                ["security", "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+                ["security", "find-generic-password", "-s", claude_accounts.service_name(config_dir or "", is_main), "-w"],
                 capture_output=True, text=True, timeout=5, check=True,
             ).stdout
         else:
-            text = CREDENTIALS_FILE.read_text()
+            text = (CREDENTIALS_FILE if is_main or not config_dir else claude_accounts.credentials_file(config_dir)).read_text()
         d_creds = json.loads(text)
         token = d_creds.get("claudeAiOauth", {}).get("accessToken")
         if not token:
@@ -222,11 +231,36 @@ def sync(host: str, every: int, now: int) -> tuple[str, bool]:
     return f"sync ↑{d_end.get('inserted', 0)} ↓{d_got['inserted']}", False
 
 
-def newest_age(now: int) -> int | None:
-    """Seconds since the account's newest reading, any source, any machine."""
+def newest_age(now: int, account: str | None = None, is_main: bool = True) -> int | None:
+    """Seconds since the account's newest reading, any source, any machine. The main account: the `latest` view;
+    another account (its organization uuid): `latest_by_account`. None: no reading (or a database not yet migrated)."""
     db = usage_db.open_account("claude", readonly=True)
-    ts = db and db.execute("SELECT ts FROM latest").fetchone()
-    return now - ts[0] if ts else None
+    if db is None:
+        return None
+    try:
+        if is_main:
+            row = db.execute("SELECT ts FROM latest").fetchone()
+        elif account:
+            row = db.execute("SELECT ts FROM latest_by_account WHERE account = ?", (account,)).fetchone()
+        else:
+            row = None
+    except Exception:           # a database before the v4 migration has no latest_by_account
+        row = None
+    return now - row[0] if row else None
+
+
+def read_waits() -> dict:
+    try:
+        return {k: int(v) for k, v in json.loads(WAIT_STATE.read_text()).items()}
+    except (OSError, ValueError, AttributeError, TypeError):
+        return {}
+
+
+def write_waits(d_waits: dict, now: int) -> None:
+    WAIT_STATE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = WAIT_STATE.with_name(WAIT_STATE.name + ".tmp")
+    tmp.write_text(json.dumps({k: v for k, v in d_waits.items() if v > now}))
+    tmp.replace(WAIT_STATE)
 
 
 def _pct(d_window) -> str:
@@ -234,27 +268,19 @@ def _pct(d_window) -> str:
     return "?" if pct is None else f"{pct:.0f}"
 
 
-def main(argv: list[str] | None = None) -> None:
-    import argparse
-    parser = argparse.ArgumentParser(description="One reading of the Claude account's quota (see the module docstring).")
-    parser.add_argument("--sync-with", metavar="HOST", help="first the 2-min sync of the readings with HOST (the Mac only)")
-    parser.add_argument("--sync-every", type=int, default=110, metavar="SECONDS", help="with --sync-with: sync when the last one is this old")
-    parser.add_argument("--if-older-than", type=int, default=0, metavar="SECONDS",
-                        help="poll only if the account's newest reading is at least this old")
-    args = parser.parse_args(argv)
-    now = int(time.time())
-    said, stale = sync(args.sync_with, args.sync_every, now) if args.sync_with else ("", False)
-    tail = f" · {said}" if said else ""
-    age = newest_age(now)
-    if age is not None and age < args.if_older_than:
-        print(f"quota fresh enough ({age} s){tail}")
-        sys.exit(1 if stale else 10)
-
-    token, d_error = fetch_token()
+def poll_account(d_acct: dict, if_older_than: int, now: int, d_waits: dict) -> tuple[str, str, int | None]:
+    """One account: skip when its newest reading is young or its 429 wait is running, else one attempt (one start =
+    at most one attempt per account). Returns (outcome, text, retry_after_s): outcome is "skip", "ok", "429" or "fail"."""
+    name = d_acct["name"]
+    if d_waits.get(name, 0) > now:
+        return "skip", f"429 wait {d_waits[name] - now} s", None
+    age = newest_age(now, d_acct["org_uuid"], d_acct["is_main"])
+    if age is not None and age < if_older_than:
+        return "skip", f"quota fresh enough ({age} s)", None
+    token, d_error = fetch_token(d_acct["config_dir"], d_acct["is_main"])
     d_api = d_api_headers = None
     if token:
         d_api, d_api_headers, d_error = fetch_usage(token)
-
     d_record = {
         "ts": int(time.time()),
         "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -264,27 +290,81 @@ def main(argv: list[str] | None = None) -> None:
         "api_headers": d_api_headers,
         "error": d_error,  # None on success; why the reading is missing otherwise
     }
-    raw = json.dumps(d_record)
+    if d_acct["org_uuid"]:
+        d_record["account"] = d_acct["org_uuid"]   # since 2026-11-19: whose reading (the gate falls back to the header)
+    d_record["account_name"] = name
     # The gate stores a reading in account_quotas, a failed attempt in poll_errors.
-    ingest_account_quota.add_row(usage_db.open_account("claude"), "claude", d_record, raw)
+    ingest_account_quota.add_row(usage_db.open_account("claude"), "claude", d_record, json.dumps(d_record))
     if d_error is None:
-        print(f"5h {_pct(d_api.get('five_hour'))}% · 7d {_pct(d_api.get('seven_day'))}%{tail}")
-        sys.exit(1 if stale else 0)
+        return "ok", f"5h {_pct(d_api.get('five_hour'))}% · 7d {_pct(d_api.get('seven_day'))}%", None
     if d_error.get("status") == 429:
-        print(f"{said + ' · ' if said else ''}retry-after {d_error.get('retry_after_s') or 0}")
+        return "429", "retry-after", int(d_error.get("retry_after_s") or 0)
+    return "fail", "failed: " + " ".join(str(d_error[k]) for k in ("stage", "type", "status") if d_error.get(k) is not None), None
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description="One reading of each Claude account's quota (see the module docstring).")
+    parser.add_argument("--sync-with", metavar="HOST", help="first the 2-min sync of the readings with HOST (the Mac only)")
+    parser.add_argument("--sync-every", type=int, default=110, metavar="SECONDS", help="with --sync-with: sync when the last one is this old")
+    parser.add_argument("--if-older-than", type=int, default=0, metavar="SECONDS",
+                        help="poll an account only if its newest reading is at least this old")
+    args = parser.parse_args(argv)
+    now = int(time.time())
+    said, stale = sync(args.sync_with, args.sync_every, now) if args.sync_with else ("", False)
+    tail = f" · {said}" if said else ""
+
+    # The accounts of this machine (2026-11-19): none readable (a bare test runtime) = the main account alone, as before.
+    l_accounts = claude_accounts.local_accounts()
+    claude_accounts.write_cache(l_accounts)
+    try:
+        ingest_account_quota.upsert_accounts(usage_db.open_account("claude"), [a for a in l_accounts if a["org_uuid"]], now)
+    except Exception as exc:
+        print(f"accounts table not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
+    d_waits = read_waits()
+    l_results = [(a, *poll_account(a, args.if_older_than, now, d_waits)) for a in l_accounts]
+    # A 429 wait kept here: another account's always (the job's WAIT cannot hold one account only); the main
+    # account's only when another account was read in this run (the run then succeeds, so the job's own WAIT,
+    # exit 75, does not hold the main account back).
+    others_read = any(o == "ok" for _, o, _, _ in l_results[1:])
+    for a, outcome, _, retry in l_results:
+        if outcome == "429" and (not a["is_main"] or others_read):
+            d_waits[a["name"]] = now + retry
+    write_waits(d_waits, now)
+
+    others = "".join(f" · {a['name']} {text}" for a, outcome, text, _ in l_results[1:] if outcome != "skip")
+    # The exit follows the main account (what the job and its dashboard mean), except: it skipped and another account
+    # was read -> success. A failure of another account (a login not used for 8 h reads 401) is in the line, never a failed run.
+    _, outcome, text, retry = l_results[0]
+    if outcome == "skip" and any(o == "ok" for _, o, _, _ in l_results[1:]):
+        print(f"{text}{others}{tail}")
+        sys.exit(1 if stale else 0)
+    if outcome == "skip":
+        print(f"{text}{others}{tail}")
+        sys.exit(1 if stale else 10)
+    if outcome == "ok":
+        print(f"{text}{others}{tail}")
+        sys.exit(1 if stale else 0)
+    if outcome == "429":
+        if any(o == "ok" for _, o, _, _ in l_results[1:]):   # the other accounts go on; the main one waits in WAIT_STATE
+            print(f"{text} {retry}{others}{tail}")
+            sys.exit(1 if stale else 0)
+        print(f"{said + ' · ' if said else ''}retry-after {retry}")
         sys.exit(75)
-    print("failed: " + " ".join(str(d_error[k]) for k in ("stage", "type", "status") if d_error.get(k) is not None) + tail)
+    print(text + others + tail)
     sys.exit(1)
 
 
 def offer_latest() -> None:
-    """After every run, whatever its outcome (a reading, a skip, a sync that
-    brought the VM's readings): the account's newest reading to
-    data/claude/quota_latest.json, if fresher than the one there
-    (agent_tracker.offer_quota_from_db). Never fails the run."""
+    """After every run, whatever its outcome (a reading, a skip, a sync that brought another machine's readings): each
+    account's newest reading to its file, if fresher than the one there: the main account's data/claude/quota_latest.json,
+    another's quota_latest.<name>.json (agent_tracker.offer_quota_from_db). Never fails the run."""
     try:
         import agent_tracker
         agent_tracker.offer_quota_from_db("claude")
+        for d_acct in claude_accounts.local_accounts()[1:]:
+            if d_acct["org_uuid"]:
+                agent_tracker.offer_quota_from_db("claude", account=d_acct["org_uuid"], name=d_acct["name"])
     except Exception as exc:
         print(f"quota_latest.json not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
 

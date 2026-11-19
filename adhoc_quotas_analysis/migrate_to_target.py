@@ -102,6 +102,13 @@ Subcommands (more are added as the phases are built):
            Refuses while an aggregates run or a receive is in progress.
            Idempotent: what is already moved is said and skipped.
 
+  accounts-v4
+           (2026-11-19, every machine, once per deploy of the multi-account code) data/claude/account_quotas.db: a copy
+           into data/_archive/ before the first change, the `account` column and its index, the `accounts` table,
+           the views `latest` (the main account only) and `latest_by_account`, user_version 4; and
+           data/claude/sessions_usages.db: the `telemetry.account` column. Nothing is backfilled (NULL = before =
+           the main account). Idempotent.
+
 Usage:
   python3 adhoc_quotas_analysis/migrate_to_target.py STEP [options] [--runtime DIR]
 """
@@ -120,7 +127,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("step", choices=["backup", "pause", "cat1-shared", "sync-init", "cat1-machine", "cat1-seed-vm",
                                     "remove-trigger", "check-intermediary", "archive-central", "view-latest", "remove-legacy", "drop-old-requests",
-                                    "data-layout"])
+                                    "data-layout", "accounts-v4"])
 parser.add_argument("job", nargs="?", help="pause, remove-trigger: the job (e.g. claude-quota)")
 parser.add_argument("--runtime", type=Path, default=Path.home() / "opt" / "agent-usage-tracker")
 parser.add_argument("--peer", help="cat1-shared: the other machine (ssh alias)")
@@ -192,7 +199,7 @@ def backup() -> None:
 ACCOUNT_COLUMNS = ("ts, dt, source, five_hour_pct, five_hour_resets_ts, seven_day_pct, seven_day_resets_ts, "
                    "observed_by_session, written_ts, raw, row_hash")
 # The latest view as usage_db.ACCOUNT_SCHEMA creates it on a new database.
-LATEST_VIEW = usage_db.ACCOUNT_SCHEMA[usage_db.ACCOUNT_SCHEMA.index("CREATE VIEW latest"):].strip().rstrip(";")
+LATEST_VIEW = usage_db.LATEST_VIEW.strip()
 
 
 def open_rw(path: Path):
@@ -553,9 +560,50 @@ def data_layout() -> None:
         f"central/ {'still there' if central.exists() else 'gone'}")
 
 
+def accounts_v4() -> None:
+    folder = args.runtime / "data" / "claude"
+    path = folder / "account_quotas.db"
+    if path.exists():
+        db = open_rw(path)
+        if "account" not in [r[1] for r in db.execute("PRAGMA table_info(account_quotas)")]:
+            copy_path = ARCHIVE / f"data__claude__account_quotas.db.pre-accounts-{STAMP}.db"
+            copy = sqlite3.connect(copy_path)
+            db.backup(copy)
+            copy.close()
+            say(f"account_quotas.db: copied to {copy_path.name}")
+            db.execute("ALTER TABLE account_quotas ADD COLUMN account TEXT")
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("CREATE INDEX IF NOT EXISTS account_quotas_account ON account_quotas(account, ts)")
+        db.execute(usage_db.ACCOUNTS_TABLE.replace("CREATE TABLE accounts", "CREATE TABLE IF NOT EXISTS accounts"))
+        for view, sql in (("latest", usage_db.LATEST_VIEW), ("latest_by_account", usage_db.LATEST_BY_ACCOUNT_VIEW)):
+            db.execute(f"DROP VIEW IF EXISTS {view}")
+            db.execute(sql.strip())
+        db.execute(f"PRAGMA user_version = {usage_db.SCHEMA_VERSION}")
+        db.execute("COMMIT")
+        say(f"account_quotas.db: v{usage_db.SCHEMA_VERSION}; latest now reads "
+            f"{db.execute('SELECT source, machine, five_hour_pct, seven_day_pct FROM latest').fetchone()}")
+    else:
+        say("account_quotas.db: absent, nothing to do")
+    path = folder / "sessions_usages.db"
+    if path.exists():
+        db = open_rw(path)
+        if "account" not in [r[1] for r in db.execute("PRAGMA table_info(telemetry)")]:
+            copy_path = ARCHIVE / f"data__claude__sessions_usages.db.pre-accounts-{STAMP}.db"
+            copy = sqlite3.connect(copy_path)
+            db.backup(copy)
+            copy.close()
+            say(f"sessions_usages.db: copied to {copy_path.name}")
+            db.execute("ALTER TABLE telemetry ADD COLUMN account TEXT")
+            say("sessions_usages.db: telemetry.account added")
+        else:
+            say("sessions_usages.db: telemetry.account already there")
+    else:
+        say("sessions_usages.db: absent, nothing to do")
+
+
 {"backup": backup, "pause": pause, "cat1-shared": cat1_shared, "sync-init": sync_init,
  "cat1-machine": cat1_machine, "cat1-seed-vm": cat1_seed_vm,
  "remove-trigger": remove_trigger, "check-intermediary": check_intermediary,
  "archive-central": archive_central, "view-latest": view_latest,
  "remove-legacy": remove_legacy, "drop-old-requests": drop_old_requests,
- "data-layout": data_layout}[args.step]()
+ "data-layout": data_layout, "accounts-v4": accounts_v4}[args.step]()

@@ -40,12 +40,12 @@ assert_eq "URLError stays a network error" "network URLError" \
 # attempts> <latest view's source, or none>".
 poll_once() {
     local dir; dir="$(mktemp -d "${TMPDIR:-/tmp}/th-poll.XXXXXX")"
-    AGENT_TRACKER_HOME="$dir" python3 -c "
+    HOME="$dir" AGENT_TRACKER_HOME="$dir" python3 -c "
 import sys
 from pathlib import Path
 sys.path.insert(0, '$SRC_DIR')
 import claude_quota_api_poller as poll_claude
-poll_claude.fetch_token = lambda: ('dummy', None)
+poll_claude.fetch_token = lambda *a: ('dummy', None)
 poll_claude.fetch_usage = lambda token: $1
 poll_claude.main()
 " > /dev/null 2>&1
@@ -97,11 +97,11 @@ print(*d.execute(sys.argv[1]).fetchone(), sep='\t')" "$1"; }
 # poll <fetch_usage return expression> [poller args...] -> "<exit code> <last line>"; the local runtime is $LOCAL
 poll() {
     local expr="$1"; shift
-    out="$(PATH="$FAKE/bin:$PATH" AGENT_TRACKER_HOME="$LOCAL" JR_MACHINE_NAME=mac python3 -c "
+    out="$(PATH="$FAKE/bin:$PATH" HOME="$FAKE/home" AGENT_TRACKER_HOME="$LOCAL" JR_MACHINE_NAME=mac python3 -c "
 import sys
 sys.path.insert(0, '$SRC_DIR')
 import claude_quota_api_poller as poll_claude
-poll_claude.fetch_token = lambda: ('dummy', None)
+poll_claude.fetch_token = lambda *a: ('dummy', None)
 poll_claude.fetch_usage = lambda token: $expr
 poll_claude.main(sys.argv[1:])
 " "$@" 2>/dev/null)"
@@ -123,6 +123,66 @@ assert_eq "network error -> 1" "1 failed: network URLError" "$(poll "(None, None
 section "--if-older-than: no poll while the newest reading is younger"
 assert_match "the reading above is seconds old: exit 10, its age" "$(poll "$NEVER" --if-older-than=110)" "^10 quota fresh enough \([0-9]+ s\)$"
 assert_eq "older than 0 s: polls" "0 5h 42% · 7d 18%" "$(poll "$READING" --if-older-than=0)"
+
+# ---------------------------------------------------------------- several accounts (2026-11-19)
+section "several accounts: each polled with its own token, freshness and 429 wait; another account never fails the run"
+UA="11111111-1111-4111-8111-111111111111"; UB="22222222-2222-4222-8222-222222222222"
+MA="$(mktemp -d "${TMPDIR:-/tmp}/th-multi.XXXXXX")"
+trap 'rm -rf "$MA"' EXIT
+mkdir -p "$MA/home/.claude/account-b" "$MA/rt"
+echo '{"oauthAccount":{"organizationUuid":"'$UA'"}}' > "$MA/home/.claude.json"
+echo '{"oauthAccount":{"organizationUuid":"'$UB'"}}' > "$MA/home/.claude/account-b/.claude.json"
+# multi <a's fetch result> <b's fetch result> [poller args...] -> "<exit> <last line>"; the runtime ($MA/rt) is kept between calls
+multi() {
+    local fa="$1" fb="$2"; shift 2
+    HOME="$MA/home" AGENT_TRACKER_HOME="$MA/rt" JR_MACHINE_NAME=mac python3 -c "
+import sys
+sys.path.insert(0, '$SRC_DIR')
+import claude_quota_api_poller as p
+p.fetch_token = lambda cd=None, is_main=True: ('tok-a' if is_main else 'tok-b', None)
+res = {'tok-a': $fa, 'tok-b': $fb}
+p.fetch_usage = lambda token: res[token]
+sys.argv = ['x'] + sys.argv[1:]
+try:
+    p.main()
+except SystemExit as e:
+    sys.stdout.flush(); print('::exit', e.code)
+finally:
+    p.offer_latest()
+" "$@" 2>/dev/null | awk '/::exit/ {code=$2} !/::exit/ {line=$0} END {print code, line}'
+}
+mq() { python3 -c "import sqlite3, sys
+for r in sqlite3.connect('$MA/rt/data/claude/account_quotas.db').execute(sys.argv[1]): print('\t'.join(str(v) for v in r))" "$1"; }
+OKA="({'five_hour': {'utilization': 10.0, 'resets_at': '2099-01-01T00:00:00+00:00'}, 'seven_day': {'utilization': 50.0, 'resets_at': '2099-01-01T00:00:00+00:00'}}, {}, None)"
+OKB="({'five_hour': {'utilization': 3.0, 'resets_at': '2099-01-01T00:00:00+00:00'}, 'seven_day': {'utilization': 20.0, 'resets_at': '2099-01-01T00:00:00+00:00'}}, {}, None)"
+E401="(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 401})"
+E429="(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 429, 'retry_after_s': 600})"
+
+assert_eq "both read: success, the main account's summary first" "0 5h 10% · 7d 50% · b 5h 3% · 7d 20%" "$(multi "$OKA" "$OKB")"
+assert_eq "...one reading per account, each with its organization uuid" "$UA	claude_api
+$UB	claude_api" "$(mq "SELECT account, source FROM account_quotas ORDER BY ts, rowid")"
+assert_eq "...the accounts table names them" "a	$UA	1
+b	$UB	0" "$(mq "SELECT name, org_uuid, is_main FROM accounts ORDER BY name")"
+assert_eq "...latest is the main account's, latest_by_account has both" "50.0	2" "$(mq "SELECT (SELECT seven_day_pct FROM latest), (SELECT COUNT(*) FROM latest_by_account)")"
+assert_eq "...the main account's quota file" "50" "$(jq -r '.seven_day.used_percentage' "$MA/rt/data/claude/quota_latest.json")"
+assert_eq "...b's own file, with its name and uuid" "20 b $UB" "$(jq -r '"\(.seven_day.used_percentage) \(.account_name) \(.account)"' "$MA/rt/data/claude/quota_latest.b.json")"
+assert_eq "...the cache tick reads" "a b" "$(jq -r '.accounts | to_entries | map(.value.name) | join(" ")' "$MA/rt/data/claude/accounts.json")"
+
+assert_eq "b's 401 does not fail the run" "0 5h 10% · 7d 50% · b failed: http HTTPError 401" "$(multi "$OKA" "$E401")"
+assert_eq "...it is a failed attempt of b's, not a reading" "1" "$(mq "SELECT COUNT(*) FROM poll_errors WHERE raw LIKE '%\"account\": \"$UB\"%'")"
+assert_eq "a's 401 fails it" "1 failed: http HTTPError 401 · b 5h 3% · 7d 20%" "$(multi "$E401" "$OKB")"
+
+assert_eq "a 429, b read: the run goes on (exit 0)" "0 retry-after 600 · b 5h 3% · 7d 20%" "$(multi "$E429" "$OKB")"
+assert_eq "...a waits (no poll of a), b is polled again" "0 429 wait" "$(multi "$OKA" "$OKB" | cut -c1-10)"
+assert_eq "...exit 0 because b was read, a's wait in the line" "0 429 wait" "$(multi "$OKA" "$OKB" | cut -c1-10)"
+rm -f "$MA/rt/state/sync/claude_quota_wait.json"
+assert_eq "a 429 and no other account read: 75, retry-after last" "75 retry-after 600" "$(multi "$E429" "$E401")"
+assert_eq "...nothing kept here: the job's WAIT holds a back (a polled again at once)" "75 retry-after 600" "$(multi "$E429" "$E401")"
+rm -f "$MA/rt/state/sync/claude_quota_wait.json"
+
+assert_match "freshness per account: all fresh, exit 10" "$(multi "$OKA" "$OKB" --if-older-than=99999)" "^10 quota fresh enough"
+python3 -c "import sqlite3; db = sqlite3.connect('$MA/rt/data/claude/account_quotas.db'); db.execute(\"UPDATE account_quotas SET ts = ts - 1000 WHERE account = '$UB'\"); db.commit()"
+assert_eq "b's reading is old, a's is young: only b polled (a skipped: exit 0 because b was read)" "0" "$(multi "$OKA" "$OKB" --if-older-than=500 | cut -d' ' -f1)"
 
 section "--sync-with: each machine's own readings, both ways, in one ssh call"
 # The VM's own reading (1 s after the Mac's, so it is the newest), and one from before 2026-10-10

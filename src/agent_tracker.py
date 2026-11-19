@@ -345,11 +345,13 @@ def maybe_snapshot() -> None:
 
 # ---------------------------------------------------------------- quota_latest.json
 
-def quota_path(agent: str) -> Path:
-    return HOME / "data" / agent / "quota_latest.json"
+def quota_path(agent: str, name: str | None = None) -> Path:
+    """quota_latest.json (the main account), quota_latest.<name>.json (another Claude account, 2026-11-19)."""
+    return HOME / "data" / agent / ("quota_latest.json" if name in (None, "a") else f"quota_latest.{name}.json")
 
 
-def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week) -> bool:
+def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week,
+                name: str | None = None, account: str | None = None) -> bool:
     """Writes data/<agent>/quota_latest.json when this reading is fresher
     (larger ts) than the one there, or as old with other values; returns
     whether it did. A tie with other values is a later reading: a Claude
@@ -357,9 +359,10 @@ def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week) 
     time), 85 times in 2 days on 2026-11-07 (31% kept, 32% refused). Windows are
     {"used_percentage", "resets_at" (epoch s)} or None, the shape of Claude
     Code's statusline `rate_limits`. One writer at a time (flock on the
-    folder), so an older reading never replaces a newer one."""
+    folder), so an older reading never replaces a newer one. `name`, `account`: another Claude account (its local
+    name and organization uuid): its own file, with both added."""
     import fcntl
-    path = quota_path(agent)
+    path = quota_path(agent, name)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path.parent, os.O_RDONLY)
     try:
@@ -368,8 +371,11 @@ def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week) 
         if isinstance(d_old, dict) and isinstance(d_old.get("ts"), int) and (
                 d_old["ts"] > ts or d_old["ts"] == ts and (d_old.get("five_hour"), d_old.get("seven_day")) == (d_five, d_week)):
             return False
-        write_json_atomic(path, {"ts": int(ts), "dt": iso(ts), "source": source, "machine": machine_name,
-                                 "five_hour": d_five, "seven_day": d_week})
+        d_new = {"ts": int(ts), "dt": iso(ts), "source": source, "machine": machine_name,
+                 "five_hour": d_five, "seven_day": d_week}
+        if name not in (None, "a"):
+            d_new |= {"account_name": name, "account": account}
+        write_json_atomic(path, d_new)
         return True
     finally:
         os.close(fd)
@@ -388,29 +394,43 @@ def _window(pct, resets_at) -> dict | None:
 def offer_quota_from_payload(d_payload: dict, when: int) -> bool:
     """tick: the statusline's rate_limits, dated `when` (statusline_usage.store's date)."""
     d_limits = d_payload.get("rate_limits") or {}
+    import claude_accounts
+    d_acct = claude_accounts.session_account()
+    if d_acct is None:       # an account this machine does not know: nothing to offer (never guess)
+        return False
     l_windows = [_window((d_limits.get(k) or {}).get("used_percentage"), (d_limits.get(k) or {}).get("resets_at"))
                  for k in ("five_hour", "seven_day")]
-    return offer_quota("claude", when, "statusline", machine(), *l_windows)
+    return offer_quota("claude", when, "statusline", machine(), *l_windows, name=d_acct["name"], account=d_acct["org_uuid"])
 
 
-def offer_quota_from_db(agent: str) -> bool:
+def offer_quota_from_db(agent: str, account: str | None = None, name: str | None = None) -> bool:
     """The quota pollers, after each run: the newest reading of
     data/<agent>/account_quotas.db (any source, any machine: the poller's
     own, or one the sync brought), unchanged - no reset rule here, readers
-    apply it (FOR_READERS.md rule 8)."""
+    apply it (FOR_READERS.md rule 8). The main account's, or, given its
+    organization uuid and local name, another Claude account's (own file)."""
     import sqlite3
     db = usage_db.open_account(agent, readonly=True)
     if db is None:
         return False
     db.row_factory = sqlite3.Row
-    row = db.execute("SELECT * FROM account_quotas WHERE five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL "
-                     "ORDER BY ts DESC, rowid DESC LIMIT 1").fetchone()
+    l_cols = [r[1] for r in db.execute("PRAGMA table_info(account_quotas)")]
+    where, l_params = "(five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL)", ()
+    if "account" in l_cols:
+        if account:
+            where, l_params = where + " AND account = ?", (account,)
+        else:      # the main account: readings with no account (before 2026-11-19) or the main one's
+            where += " AND (account IS NULL OR account IS (SELECT org_uuid FROM accounts WHERE is_main = 1))"
+    elif account:
+        return False
+    row = db.execute(f"SELECT * FROM account_quotas WHERE {where} ORDER BY ts DESC, rowid DESC LIMIT 1", l_params).fetchone()
     if row is None:
         return False
     return offer_quota(agent, row["ts"], "statusline" if row["source"].endswith("_statusline") else "poller",
                        row["machine"] if "machine" in row.keys() else None,
                        _window(row["five_hour_pct"], row["five_hour_resets_ts"]),
-                       _window(row["seven_day_pct"], row["seven_day_resets_ts"]))
+                       _window(row["seven_day_pct"], row["seven_day_resets_ts"]),
+                       name=name, account=account)
 
 
 # ---------------------------------------------------------------- the session files
@@ -513,7 +533,8 @@ def append_lifecycle(event: str, d_hook: dict, agent: str) -> bool:
             if pane_id else ""
         d_line = {"ts": now, "dt": iso(now), "event": "start", "source": d_hook.get("source") or "startup",
                   "agent": agent, "machine": machine(), "boot_ts": boot_ts(), "pid": pid, "pid_start": pid_start,
-                  "pane_id": pane_id, "pane": pane or None, "cwd": d_hook.get("cwd") or os.getcwd()}
+                  "pane_id": pane_id, "pane": pane or None, "cwd": d_hook.get("cwd") or os.getcwd(),
+                  "account": os.environ.get("CLAUDE_ACCOUNT") or "a"}
     else:
         d_line = {"ts": now, "dt": iso(now), "event": "end", "reason": d_hook.get("reason") or "other", "pid": pid}
     line = json.dumps(d_line, separators=(",", ":"))

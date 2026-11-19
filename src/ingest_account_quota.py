@@ -51,6 +51,8 @@ SOURCES = {
 SESSION_KEYS = {"session_cost_usd", "prompt_cache", "session_id"}
 FIELD_SEP = "\x1c"   # between the six fields statusline_payload_reader.py prints
 MACHINE_RE = re.compile(r"[A-Za-z0-9-]+")
+# A Claude account's id: its organization uuid.
+ACCOUNT_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 # Rows per direction per sync call: a backlog drains over successive runs.
 SYNC_LIMIT = 20_000
 
@@ -75,6 +77,23 @@ def _number(value) -> float | None:
     return float(value)
 
 
+def _account(d_row: dict) -> str | None:
+    """The row's account (organization uuid): its own `account`, else, for a poller row, the response header
+    anthropic-organization-id. None = before 2026-11-19 = the main account. ValueError when not a uuid."""
+    account = d_row.get("account")
+    if account is None:
+        account = ((d_row.get("api_headers") or {}).get("anthropic-organization-id"))
+    if account is None:
+        return None
+    if not isinstance(account, str) or not ACCOUNT_RE.fullmatch(account):
+        raise ValueError(f"not an account (organization uuid): {account!r}")
+    return account
+
+
+def has_column(db, table: str, column: str) -> bool:
+    return column in [r[1] for r in db.execute(f"PRAGMA table_info({table})")]
+
+
 def columns(agent: str, d_row: dict) -> dict:
     """The typed columns of one reading, by source. Rows from before
     2026-08-30 have no `source`: they are Claude poller rows."""
@@ -84,7 +103,7 @@ def columns(agent: str, d_row: dict) -> dict:
     written_ts = int(d_row["ts"])
     d_col = dict(ts=written_ts, source=source, five_hour_pct=None, five_hour_resets_ts=None,
                  seven_day_pct=None, seven_day_resets_ts=None, observed_by_session=None, written_ts=written_ts,
-                 machine=d_row.get("machine"))
+                 machine=d_row.get("machine"), account=_account(d_row))
     if source == "claude_statusline":
         # Dated by the transcript's last assistant entry, not by the write.
         d_col.update(ts=int(d_row.get("observed_at") or written_ts),
@@ -165,11 +184,31 @@ def add_row(db, agent: str, d_row: dict, raw: str | None = None, dedup: bool = T
         "observed_by_session", "written_ts")}, "raw": raw, "row_hash": h}
     if d_col["machine"] is not None:
         d_values["machine"] = d_col["machine"]
+    if d_col["account"] is not None and has_column(db, "account_quotas", "account"):   # not before the v4 migration
+        d_values["account"] = d_col["account"]
     cur = db.execute(f"INSERT OR IGNORE INTO account_quotas ({', '.join(d_values)}) VALUES ({','.join('?' * len(d_values))})",
                      list(d_values.values()))
     if not cur.rowcount:
         return "duplicate"
     return "inserted"
+
+
+def upsert_accounts(db, l_accounts: list[dict], now: int | None = None) -> int:
+    """The `accounts` table (this machine's Claude accounts): one dict {name, org_uuid, config_dir, is_main} each.
+    Replaces the whole table inside one transaction, so a removed account disappears. Returns the count.
+    Does nothing on a database not yet migrated to v4."""
+    if not has_column(db, "account_quotas", "account") or not [r for r in db.execute("PRAGMA table_info(accounts)")]:
+        return 0
+    now = int(time.time()) if now is None else now
+    rows = []
+    for d in l_accounts:
+        if not ACCOUNT_RE.fullmatch(str(d["org_uuid"])) or not re.fullmatch(r"[a-z0-9_-]+", str(d["name"])):
+            raise ValueError(f"bad account: {d!r}")
+        rows.append((d["name"], d["org_uuid"], str(d["config_dir"]), 1 if d.get("is_main") else 0, now))
+    with db:
+        db.execute("DELETE FROM accounts")
+        db.executemany("INSERT INTO accounts (name, org_uuid, config_dir, is_main, seen_ts) VALUES (?,?,?,?,?)", rows)
+    return len(rows)
 
 
 def last_attempt(db, sources: tuple[str, ...] | None = None) -> dict | None:

@@ -57,4 +57,12 @@ py "g.add_scan(db, 2000, 1250, 0)" >/dev/null
 assert_eq "the slot ending at 1200 is final, the one ending at 1500 is not" "1	0" "$(q "SELECT final FROM usage_5m ORDER BY slot_ts" | paste -sd '\t' -)"
 assert_eq "slot_dt is the slot start in UTC" "1970-01-01T00:15:00Z" "$(q "SELECT slot_dt FROM usage_5m ORDER BY slot_ts LIMIT 1")"
 
+section "telemetry.account: the organization.id attribute, a column since 2026-11-19"
+UB="22222222-2222-4222-8222-222222222222"
+AGENT=claude SDB="$RT/data/claude/sessions_usages.db"
+AGENT=claude ingest <<< '{"source":"claude_otel","observed_at":50,"received_at":51,"event":"api_request","attributes":{"session.id":"s9","request_id":"acct1","organization.id":"'$UB'"}}' >/dev/null
+assert_eq "the account is stored" "acct1	$UB" "$(q "SELECT request_id, account FROM telemetry WHERE request_id = 'acct1'")"
+AGENT=claude ingest <<< '{"source":"claude_otel","observed_at":52,"received_at":53,"event":"api_request","attributes":{"session.id":"s9","request_id":"acct2"}}' >/dev/null
+assert_eq "none given: NULL" "acct2	" "$(q "SELECT request_id, account FROM telemetry WHERE request_id = 'acct2'")"
+
 harness_summary

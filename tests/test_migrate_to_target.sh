@@ -63,6 +63,7 @@ db = usage_db.connect(path, usage_db.ACCOUNT_SCHEMA)
 for ts in sys.argv[2:]:
     g.add_row(db, "claude", {"ts": int(ts), "source": "claude_api", "api": {"five_hour": {"utilization": 1.0}}})
 db.execute("DROP VIEW latest")
+db.execute("DROP VIEW latest_by_account")   # the v4 view names machine
 db.execute("ALTER TABLE account_quotas DROP COLUMN machine")
 db.execute("CREATE VIEW latest AS SELECT ts FROM account_quotas ORDER BY ts DESC LIMIT 1")
 db.execute("PRAGMA user_version = 1")
@@ -96,7 +97,7 @@ assert_eq "cat1-machine (VM): its own reading labelled, the shared one NULL" "15
 200	" "$(qq "$VM/data/claude/account_quotas.db" "SELECT ts, machine FROM account_quotas ORDER BY ts")"
 assert_eq "...the central copy labelled by its folder" "100	mac
 200	" "$(qq "$VM/central/mac/data/claude/account_quotas.db" "SELECT ts, machine FROM account_quotas ORDER BY ts")"
-assert_eq "...the latest view names the machine, the current schema version" "200	3" \
+assert_eq "...the latest view names the machine, the current schema version" "200	4" \
     "$(qq "$VM/data/claude/account_quotas.db" "SELECT (SELECT ts FROM latest), (SELECT user_version FROM pragma_user_version)")"
 assert_eq "...a copy taken before the first change" "2" "$(ls "$VM/data/_archive" | grep -c 'pre-machine')"
 assert_contains "cat1-seed-vm: the Mac's own reading copied, none missing" "$(step "$VM" vm cat1-seed-vm --shared "$SHARED" --from-machine mac)" "1 readings copied"
@@ -185,7 +186,7 @@ now = int(time.time())
 db.execute("INSERT INTO account_quotas (ts, dt, source, five_hour_pct, five_hour_resets_ts, seven_day_pct, seven_day_resets_ts, written_ts, raw, row_hash, machine) "
            "VALUES (?, 'x', 'claude_api', 42.0, ?, 18.0, ?, ?, '{}', 'h', 'm1')", (now - 100, now - 10, now + 999, now))
 PY
-assert_contains "the old view replaced: a passed 5h reset reads 0%, no reset" "$(python3 "$MIGRATE" view-latest --runtime "$P4")" "latest recreated, user_version 3; it now reads ('claude_api', 'm1', 0.0, None, 18.0,"
+assert_contains "the old view replaced: a passed 5h reset reads 0%, no reset" "$(python3 "$MIGRATE" view-latest --runtime "$P4")" "latest recreated, user_version 4; it now reads ('claude_api', 'm1', 0.0, None, 18.0,"
 assert_contains "re-running: unchanged" "$(python3 "$MIGRATE" view-latest --runtime "$P4")" "latest unchanged"
 
 section "phase 4: remove-legacy"
@@ -260,5 +261,33 @@ db.execute(\"INSERT INTO slots VALUES (300, 'x', 'm2', '', '', 'm', 1, 1, 1, 1, 
 th_run env MIGRATE_SKIP_BUSY_CHECK=1 JR_MACHINE_NAME=m1 python3 "$MIGRATE" data-layout --runtime "$L2"
 assert_status "a file holding another machine's slots: refused" 1 "$TH_STATUS"
 assert_file_exists "...and left in place" "$L2/data/claude/aggregates.db"
+
+section "accounts-v4: account column, accounts table, views, telemetry.account; archived first; idempotent"
+A4="$TMP/a4"; mkdir -p "$A4/data/claude"
+python3 - "$A4" "$REPO_ROOT/src" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(f"{sys.argv[1]}/data/claude/account_quotas.db")
+db.executescript("""CREATE TABLE account_quotas (ts INTEGER NOT NULL, dt TEXT NOT NULL, source TEXT NOT NULL, five_hour_pct REAL,
+ five_hour_resets_ts INTEGER, seven_day_pct REAL, seven_day_resets_ts INTEGER, observed_by_session TEXT, written_ts INTEGER NOT NULL,
+ raw TEXT NOT NULL, row_hash TEXT NOT NULL UNIQUE, machine TEXT);
+ INSERT INTO account_quotas VALUES (1,'x','claude_api',5,4102444800,40,4102444800,NULL,1,'{}','h1','m1');
+ PRAGMA user_version = 3;""")
+db.commit()
+db = sqlite3.connect(f"{sys.argv[1]}/data/claude/sessions_usages.db")
+db.executescript("CREATE TABLE telemetry (ts INTEGER, raw TEXT);")
+db.commit()
+PY
+th_run python3 "$MIGRATE" accounts-v4 --runtime "$A4"
+assert_status "first run ok" 0 "$TH_STATUS"
+q4() { python3 -c 'import sqlite3, sys
+for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]): print("\t".join("" if v is None else str(v) for v in r))' "$A4/data/claude/$1" "$2"; }
+assert_eq "user_version 4, the old reading kept, account NULL" "4	40.0	" "$(q4 account_quotas.db "SELECT (SELECT user_version FROM pragma_user_version), (SELECT seven_day_pct FROM latest), (SELECT account FROM account_quotas)")"
+assert_eq "latest_by_account has it (main unknown yet: NULL account)" "1" "$(q4 account_quotas.db "SELECT COUNT(*) FROM latest_by_account")"
+assert_eq "accounts table exists, empty" "0" "$(q4 account_quotas.db "SELECT COUNT(*) FROM accounts")"
+assert_eq "telemetry.account added" "account" "$(q4 sessions_usages.db "SELECT name FROM pragma_table_info('telemetry') WHERE name = 'account'")"
+assert_eq "archived before the change" "2" "$(ls "$A4"/data/_archive/*pre-accounts-* | wc -l | tr -d ' ')"
+th_run python3 "$MIGRATE" accounts-v4 --runtime "$A4"
+assert_status "second run ok" 0 "$TH_STATUS"
+assert_eq "...no second archive" "2" "$(ls "$A4"/data/_archive/*pre-accounts-* | wc -l | tr -d ' ')"
 
 harness_summary

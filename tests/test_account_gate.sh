@@ -82,6 +82,24 @@ assert_eq "the latest view names it" "m-1	9.0" "$(q "$ADB" "SELECT machine, five
 assert_contains "a bad name is rejected" "$(ingest claude <<< '{"ts":8001,"iso":"x","source":"claude_api","machine":"a b","api":{},"error":null}')" '"rejected": 1'
 assert_eq "a row without one: NULL" "" "$(q "$ADB" "SELECT machine FROM account_quotas WHERE ts = 3000")"
 
+section "account (organization uuid): from the row or the response header; checked; latest = the main account"
+UA="11111111-1111-4111-8111-111111111111"; UB="22222222-2222-4222-8222-222222222222"
+ingest claude <<< '{"ts":9000,"iso":"x","source":"claude_statusline","observed_at":9000,"five_hour_pct":10,"seven_day_pct":50,"five_hour_resets_at":"99999999999","seven_day_resets_at":"99999999999","observed_by_session":"sa","account":"'$UA'"}' >/dev/null
+assert_eq "statusline row: its account stored" "$UA" "$(q "$ADB" "SELECT account FROM account_quotas WHERE ts = 9000")"
+ingest claude <<< '{"ts":9100,"iso":"x","source":"claude_api","api":{"five_hour":{"utilization":3.0,"resets_at":"2099-01-01T00:00:00+00:00"},"seven_day":{"utilization":20.0,"resets_at":"2099-01-01T00:00:00+00:00"}},"api_headers":{"anthropic-organization-id":"'$UB'"},"error":null}' >/dev/null
+assert_eq "poller row: the response header gives it" "$UB" "$(q "$ADB" "SELECT account FROM account_quotas WHERE ts = 9100")"
+assert_contains "a bad account is rejected" "$(ingest claude <<< '{"ts":9200,"iso":"x","source":"claude_api","account":"nope","api":{},"error":null}')" '"rejected": 1'
+assert_eq "a row without one: NULL" "" "$(q "$ADB" "SELECT account FROM account_quotas WHERE ts = 3000")"
+assert_eq "no accounts table content: latest = newest NULL-account row, never b's" "m-1" "$(q "$ADB" "SELECT machine FROM latest")"
+AGENT_TRACKER_HOME="$RT" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import ingest_account_quota as g, usage_db
+db = usage_db.open_account("claude")
+assert g.upsert_accounts(db, [{"name": "a", "org_uuid": sys.argv[2], "config_dir": "/h/.claude", "is_main": 1}, {"name": "b", "org_uuid": sys.argv[3], "config_dir": "/h/.claude/account-b", "is_main": 0}]) == 2' "$SRC_DIR" "$UA" "$UB"
+assert_eq "latest: the main account's newest reading, though b's is newer" "50.0" "$(q "$ADB" "SELECT seven_day_pct FROM latest")"
+assert_eq "latest_by_account: one row per account, named" "$UA	a	50.0
+$UB	b	20.0" "$(q "$ADB" "SELECT account, name, seven_day_pct FROM latest_by_account WHERE account IN ('$UA','$UB') ORDER BY name")"
+assert_eq "accounts table replaced as a whole" "1" "$(AGENT_TRACKER_HOME="$RT" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import ingest_account_quota as g, usage_db
+db = usage_db.open_account("claude"); print(g.upsert_accounts(db, [{"name": "a", "org_uuid": sys.argv[2], "config_dir": "/h/.claude", "is_main": 1}]))' "$SRC_DIR" "$UA")"
+
 section "a column added later does not break the gates"
 python3 -c 'import sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
