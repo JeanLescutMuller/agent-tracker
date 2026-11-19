@@ -1,6 +1,6 @@
 # For readers: how to read this project's data
 
-For any project or script that **reads** what agent-tracker (agent-usage-tracker until 2026-11) stores: a status line, auto-job-apply, agent-resume, agent-auto-close, agent-notify, an analysis. Sections 1–3: the usage databases; section 4: the session files and `quota_latest.json`. This file says how to read it safely, and what to read. What each field means: `doc/tables.md`; what exists upstream: `doc/upstream.md`; why it is built this way: `doc/design.md`; when a row's shape changed: `doc/changes.md`.
+For any project or script that **reads** what agent-tracker (agent-usage-tracker until 2026-11) stores: a status line, auto-job-apply, agent-resume, claude-close-keep-screen, agent-notify, an analysis. Sections 1–3: the usage databases; section 4: the session files and `quota_latest.json`. This file says how to read it safely, and what to read. What each field means: `doc/tables.md`; what exists upstream: `doc/upstream.md`; why it is built this way: `doc/design.md`; when a row's shape changed: `doc/changes.md`.
 
 Last checked: 2026-11-07.
 
@@ -104,7 +104,7 @@ snapshots/<boot_ts>.tsv   tab-separated, no header; ts and dt first (when that p
  "last_seen"}     {"ts","dt"} of last_seen.json, or null
 ```
 
-`pane`, `tmux_session`, `window_index`, `pane_index` are resolved now from `pane_id` (`null` when tmux no longer has that pane). `--pane %id` and `--uuid U` keep one row. Readers: agent-auto-close, the user. `agent-tracker check` says whether every writer is writing on this machine (exit 1 and one line per problem).
+`pane`, `tmux_session`, `window_index`, `pane_index` are resolved now from `pane_id` (`null` when tmux no longer has that pane). `--pane %id` and `--uuid U` keep one row. Readers: claude-close-keep-screen, the user. `agent-tracker check` says whether every writer is writing on this machine (exit 1 and one line per problem).
 
 ## 5. When this file changes
 

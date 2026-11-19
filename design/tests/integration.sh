@@ -4,7 +4,7 @@
 # reboot, restore with `ares tmux`, check the restore. Never touches the real HOME, launchd or tmux server.
 #
 # Usage: bash integration.sh [<sandbox dir>]
-# Reads:  the worktrees in $W (branch agent-tracker-v1), /Users/jeanlescut/dev/agent-auto-close,
+# Reads:  the worktrees in $W (branch agent-tracker-v1), /Users/jeanlescut/dev/claude-close-keep-screen,
 #         fixtures/statusline_payload.claude.json
 # Writes: only under the sandbox dir; prints PASS/FAIL lines and a summary; logs in <sandbox>/log/
 set -uo pipefail
@@ -14,7 +14,7 @@ W="${W:-/Users/jeanlescut/dev}"     # the repos, by their names since 2026-11-07
 # Every tmux call (this script's and the tested code's) must go to a throwaway server on an explicit socket:
 # re-run under tests/tmux_guard.sh (the user's rule after a test killed their tmux server, 2026-11-07 15:30).
 [ -n "${TMUX_GUARD_SOCKET:-}" ] || exec bash "$HERE/../../tests/tmux_guard.sh" bash "$0" "$@"
-AAC="${AAC:-/Users/jeanlescut/dev/agent-auto-close}"
+AAC="${AAC:-/Users/jeanlescut/dev/claude-close-keep-screen}"
 S="${1:-$(mktemp -d)}"
 REAL_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
 mkdir -p "$S/home/.claude" "$S/log" "$S/out" "$S/bin" "$S/proj/alpha" "$S/proj/beta"
@@ -39,8 +39,8 @@ json() { python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(eval
 # real-home fingerprint, to prove nothing changed
 fp() { { md5 -q "$REAL_HOME/.claude/settings.json"; md5 -q "$REAL_HOME/.codex/config.toml" 2>/dev/null; \
         launchctl list | grep -ciE 'agent-tracker|agent-resume|auto-close'; \
-        ls -d "$REAL_HOME"/opt/agent-tracker "$REAL_HOME"/opt/agent-resume "$REAL_HOME"/opt/agent-auto-close 2>/dev/null; \
-        ls "$REAL_HOME/.local/bin" | grep -cE '^(agent-tracker|ares|agent-auto-close)$'; } 2>/dev/null; }
+        ls -d "$REAL_HOME"/opt/agent-tracker "$REAL_HOME"/opt/agent-resume "$REAL_HOME"/opt/claude-close-keep-screen 2>/dev/null; \
+        ls "$REAL_HOME/.local/bin" | grep -cE '^(agent-tracker|ares|claude-close-keep-screen)$'; } 2>/dev/null; }
 FP_BEFORE="$(fp)"
 
 # fake `claude` on PATH: what `ares tmux` starts after the crash
@@ -59,7 +59,7 @@ SL_CMD=$(json "$CLAUDE_CONFIG_DIR/settings.json" "d['statusLine']['command']")
 PATH="$S/bin:$SYS_DIRS" sh -c "$SL_CMD" < "$FAKE_CLAUDE_FIXTURE" > "$S/out/fallback.txt" 2> "$S/out/fallback.err"
 check "statusline still draws when agent-tracker is missing" "grep -q 'Opus' '$S/out/fallback.txt'"
 (cd "$W/agent-resume" && bash install.sh) >"$S/log/i-resume.log" 2>&1;    check "agent-resume install (ares on PATH)" "command -v ares"
-(cd "$AAC" && bash install.sh) >"$S/log/i-autoclose.log" 2>&1;                     check "agent-auto-close install" "command -v agent-auto-close"
+(cd "$AAC" && bash install.sh) >"$S/log/i-autoclose.log" 2>&1;                     check "claude-close-keep-screen install" "command -v claude-close-keep-screen"
 check "hooks: agent-tracker start/end registered" "grep -q 'agent-tracker hook start' '$CLAUDE_CONFIG_DIR/settings.json' && grep -q 'agent-tracker hook end' '$CLAUDE_CONFIG_DIR/settings.json'"
 check "hooks: agent-resume SessionStart registered" "json '$CLAUDE_CONFIG_DIR/settings.json' \"json.dumps(d['hooks']['SessionStart'])\" | grep -q 'session_start'"
 
@@ -96,11 +96,11 @@ agent-tracker now --json >"$S/out/now.json" 2>"$S/log/now.err"
 check "now lists U1 U2 U3, not U4" "json '$S/out/now.json' \"sorted(r['uuid'][:8] for r in d)\" | grep -q \"'11111111', '22222222', '33333333'\" && ! grep -q $U4 '$S/out/now.json'"
 check "now gives last_prompt from the transcript" "json '$S/out/now.json' \"all(r['last_prompt'] and r['last_prompt']['ts'] for r in d)\" | grep -q True"
 agent-tracker check >"$S/out/check.txt" 2>&1; check "agent-tracker check is green" "grep -qi 'all good' '$S/out/check.txt'"
-agent-auto-close idle --over 1 --dry-run >"$S/out/idle.txt" 2>&1
-check "agent-auto-close idle --over 1h lists the 3 open ones" "grep -c '11111111\|22222222\|33333333' '$S/out/idle.txt' | grep -q 3"
+claude-close-keep-screen idle --over 1 --dry-run >"$S/out/idle.txt" 2>&1
+check "claude-close-keep-screen idle --over 1h lists the 3 open ones" "grep -c '11111111\|22222222\|33333333' '$S/out/idle.txt' | grep -q 3"
 PANE_U3=$(json "$D/$U3/last_seen.json" "d['pane_id']")
-agent-auto-close close "$PANE_U3" >"$S/out/close.txt" 2>&1; sleep 2
-check "agent-auto-close closed U3 (end line, screen file)" "grep -q '\"event\": *\"end\"' '$D/$U3/lifecycle.jsonl' && ls '$HOME/opt/agent-auto-close/data/close-screens/' | grep -q 33333333"
+claude-close-keep-screen close "$PANE_U3" >"$S/out/close.txt" 2>&1; sleep 2
+check "claude-close-keep-screen closed U3 (end line, screen file)" "grep -q '\"event\": *\"end\"' '$D/$U3/lifecycle.jsonl' && ls '$HOME/opt/claude-close-keep-screen/data/close-screens/' | grep -q 33333333"
 check "closed pane has 'claude --resume U3' pre-typed" "tmux capture-pane -p -t '$PANE_U3' | grep -q 'claude --resume $U3'"
 ares resume --print-cmd --uuid "$U1" >"$S/out/resume_cmd.txt" 2>&1
 check "ares resume --print-cmd gives claude --resume U1" "grep -q 'claude --resume $U1' '$S/out/resume_cmd.txt'"
