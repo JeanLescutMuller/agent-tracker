@@ -91,7 +91,8 @@ CREATE TABLE accounts (
 # The account's freshest reading, whatever wrote it, on any machine, with the reset rule (doc/design.md §3.2):
 # a window whose reset time has passed is at 0% and its reset unknown (NULL), until a newer reading - readings stop
 # while nobody uses Claude Code. The MAIN account only (2026-11-19: every reader means account a); the other
-# accounts: `latest_by_account`.
+# accounts: `latest_by_account`. A machine with no main account registered yet (its poller has not run since the
+# deploy) reads every account, as before.
 LATEST_VIEW = """
 CREATE VIEW latest AS
     SELECT ts, dt, source, machine,
@@ -101,7 +102,8 @@ CREATE VIEW latest AS
            CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE seven_day_resets_ts END AS seven_day_resets_ts
     FROM (SELECT * FROM account_quotas
           WHERE (five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL)
-            AND (account IS NULL OR account IS (SELECT org_uuid FROM accounts WHERE is_main = 1))
+            AND (account IS NULL OR NOT EXISTS (SELECT 1 FROM accounts WHERE is_main = 1)
+                 OR account = (SELECT org_uuid FROM accounts WHERE is_main = 1))
           ORDER BY ts DESC, rowid DESC
           LIMIT 1)"""
 

@@ -90,7 +90,7 @@ ingest claude <<< '{"ts":9100,"iso":"x","source":"claude_api","api":{"five_hour"
 assert_eq "poller row: the response header gives it" "$UB" "$(q "$ADB" "SELECT account FROM account_quotas WHERE ts = 9100")"
 assert_contains "a bad account is rejected" "$(ingest claude <<< '{"ts":9200,"iso":"x","source":"claude_api","account":"nope","api":{},"error":null}')" '"rejected": 1'
 assert_eq "a row without one: NULL" "" "$(q "$ADB" "SELECT account FROM account_quotas WHERE ts = 3000")"
-assert_eq "no accounts table content: latest = newest NULL-account row, never b's" "m-1" "$(q "$ADB" "SELECT machine FROM latest")"
+assert_eq "no main account registered yet: latest reads every account, as before the change (the newest row is b's)" "20.0" "$(q "$ADB" "SELECT seven_day_pct FROM latest")"
 AGENT_TRACKER_HOME="$RT" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import ingest_account_quota as g, usage_db
 db = usage_db.open_account("claude")
 assert g.upsert_accounts(db, [{"name": "a", "org_uuid": sys.argv[2], "config_dir": "/h/.claude", "is_main": 1}, {"name": "b", "org_uuid": sys.argv[3], "config_dir": "/h/.claude/account-b", "is_main": 0}]) == 2' "$SRC_DIR" "$UA" "$UB"

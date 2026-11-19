@@ -420,7 +420,8 @@ def offer_quota_from_db(agent: str, account: str | None = None, name: str | None
         if account:
             where, l_params = where + " AND account = ?", (account,)
         else:      # the main account: readings with no account (before 2026-11-19) or the main one's
-            where += " AND (account IS NULL OR account IS (SELECT org_uuid FROM accounts WHERE is_main = 1))"
+            where += (" AND (account IS NULL OR NOT EXISTS (SELECT 1 FROM accounts WHERE is_main = 1)"
+                      " OR account = (SELECT org_uuid FROM accounts WHERE is_main = 1))")
     elif account:
         return False
     row = db.execute(f"SELECT * FROM account_quotas WHERE {where} ORDER BY ts DESC, rowid DESC LIMIT 1", l_params).fetchone()
