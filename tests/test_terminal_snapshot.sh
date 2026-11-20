@@ -1,7 +1,7 @@
 #!/bin/bash
 # Tests for the terminal snapshot: src/terminal_snapshot.sh (data/snapshots/<boot_ts>.tsv) and its start by
 # `agent-tracker tick` (at most once a minute, in the background). Sandbox: own HOME and runtime, a tmux server
-# of its own (TMUX_TMPDIR; run the suite under tests/tmux_guard.sh for an explicit -S socket), a fake osascript
+# of its own (TMUX_TMPDIR; run the suite under tests/run_with_test_tmux.sh for an explicit -S socket), a fake osascript
 # (harness.sh: prints $TH_FAKE_ITERM) instead of the user's iTerm2.
 # Usage: bash tests/test_terminal_snapshot.sh      Reads: src/terminal_snapshot.sh, src/agent_tracker.py
 set -uo pipefail
@@ -18,7 +18,7 @@ SNAP="$REPO_ROOT/src/terminal_snapshot.sh"
 OUT="$S/rt/data/snapshots/1794925607.tsv"
 snap() { bash "$SNAP" "$S/rt" 1794925607; }
 kind() { awk -F '\t' -v k="$1" '$3 == k' "$OUT"; }
-# Under tests/run.sh + tmux_guard.sh every test file shares one tmux server: count only this file's tmux sessions
+# Under tests/run.sh + run_with_test_tmux.sh every test file shares one tmux server: count only this file's tmux sessions
 mine() { kind pane | awk -F '\t' '$4 == "jobs/interviewing" || $4 == "snap-general"' | wc -l | tr -d ' '; }
 
 tmux new-session -d -s "jobs/interviewing" -x 200 -y 50 -n "w one" -c "$S" "sleep 600"

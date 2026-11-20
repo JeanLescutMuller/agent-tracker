@@ -4,11 +4,11 @@
 # was opened in. The SessionStart hook recorded that process's pid and pane for every Codex session.
 # Expected now: a hook run by that process writes no pid and no pane; the window's own status line (`tick --agent
 # codex`, payload key thread_id) writes them in last_seen.json, and `now` takes them from there.
-# Sandbox only: own HOME and data; every tmux call goes through tmux_guard.sh (explicit -S socket): this script re-runs
+# Sandbox only: own HOME and data; every tmux call goes through run_with_test_tmux.sh (explicit -S socket): this script re-runs
 # itself under it. Usage: bash tests/test_codex_daemon.sh      Reads: src/agent_tracker.py. Writes: a mktemp sandbox.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-[ -n "${TMUX_GUARD_SOCKET:-}" ] || exec bash "$HERE/tests/tmux_guard.sh" bash "$0" "$@"
+[ -n "${TEST_TMUX_SOCKET:-}" ] || exec bash "$HERE/tests/run_with_test_tmux.sh" bash "$0" "$@"
 S=$(mktemp -d)
 unset CLAUDE_CODE_SESSION_ID
 export HOME="$S/home" CLAUDE_CONFIG_DIR="$S/home/.claude" AGENT_TRACKER_HOME="$S/home/opt/agent-tracker" JR_MACHINE_NAME=test-machine

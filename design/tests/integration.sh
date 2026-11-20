@@ -12,8 +12,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 W="${W:-/Users/jeanlescut/dev}"     # the repos, by their names since 2026-11-07 (agent-tracker, agent-resume)
 # Every tmux call (this script's and the tested code's) must go to a throwaway server on an explicit socket:
-# re-run under tests/tmux_guard.sh (the user's rule after a test killed their tmux server, 2026-11-07 15:30).
-[ -n "${TMUX_GUARD_SOCKET:-}" ] || exec bash "$HERE/../../tests/tmux_guard.sh" bash "$0" "$@"
+# re-run under tests/run_with_test_tmux.sh (the user's rule after a test killed their tmux server, 2026-11-07 15:30).
+[ -n "${TEST_TMUX_SOCKET:-}" ] || exec bash "$HERE/../../tests/run_with_test_tmux.sh" bash "$0" "$@"
 AAC="${AAC:-/Users/jeanlescut/dev/claude-close-keep-screen}"
 S="${1:-$(mktemp -d)}"
 REAL_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
@@ -24,12 +24,12 @@ unset TMUX TMUX_PANE CLAUDE_CODE_SESSION_ID CLAUDECODE CODEX_HOME AGENT_USAGE_TR
 export HOME="$S/home" CLAUDE_CONFIG_DIR="$S/home/.claude" AGENT_TRACKER_HOME="$S/home/opt/agent-tracker"
 export AGENT_RESUME_HOME="$S/home/opt/agent-resume" JR_MACHINE_NAME=test-machine
 export FAKE_CLAUDE_FIXTURE="$HERE/../fixtures/statusline_payload.claude.json" FAKE_CLAUDE_OUT="$S/out"
-SYS_DIRS="$(dirname "$TMUX_GUARD_SOCKET")/bin:$(dirname "$TMUX_GUARD_REAL"):$(dirname "$(command -v python3)"):$(dirname "$(command -v jq)"):/usr/bin:/bin:/usr/sbin:/sbin"
+SYS_DIRS="$(dirname "$TEST_TMUX_SOCKET")/bin:$(dirname "$TEST_TMUX_REAL"):$(dirname "$(command -v python3)"):$(dirname "$(command -v jq)"):/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH="$S/bin:$HOME/.local/bin:$SYS_DIRS"
 export SHELL=/bin/zsh
 : > "$HOME/.zshrc"                       # no zsh first-run wizard in new panes
 [ "$HOME" != "$REAL_HOME" ] || { echo "refusing: HOME is the real home"; exit 2; }
-[ "$(command -v tmux)" = "$(dirname "$TMUX_GUARD_SOCKET")/bin/tmux" ] || { echo "refusing: tmux is not the guard's"; exit 2; }
+[ "$(command -v tmux)" = "$(dirname "$TEST_TMUX_SOCKET")/bin/tmux" ] || { echo "refusing: tmux is not the guard's"; exit 2; }
 
 shopt -s nullglob
 PASS=0; FAIL=0

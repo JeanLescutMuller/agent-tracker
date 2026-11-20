@@ -137,6 +137,6 @@ Vocabulary (repo `AGENTS.md`, plus these):
 - Token-conscious: long commands go to a log file, read only the tail/failures.
 - Never `rm` a glob or a variable path; delete named files one at a time after looking.
 - Never print or log a token. The Keychain stage logs only exception **types** (existing rule in the poller).
-- Tests that start tmux run under `tests/tmux_guard.sh`.
+- Tests that start tmux run under `tests/run_with_test_tmux.sh`.
 - Every commit ends with the `Co-Authored-By`, `Agent:`, `Machine:` and `Session:` trailers. Get `Machine:` with skill `machine-name`.
 - Answer the user briefly, tables over prose, full paths in backticks.
