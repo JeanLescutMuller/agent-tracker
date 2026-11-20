@@ -162,7 +162,7 @@ Idle, both poll less often: the reset rule (§3.2) covers the window ends.
 
 ### 3.5 Several Claude accounts (2026-11-19)
 
-my-setup's `claude-account` lets one machine run sessions on several claude.ai accounts: account **a** is Claude Code's default folder `~/.claude` (the **main account**, what every reader, every scheduled job and a plain `claude` mean), account `b`... is `~/.claude/account-b/` (its sessions have `CLAUDE_CONFIG_DIR` set to it and `CLAUDE_ACCOUNT=b`). An account's id is its **organization uuid** (`oauthAccount.organizationUuid` of its `.claude.json`; header `anthropic-organization-id`; telemetry attribute `organization.id`): the same on every machine. The plan: `doc/plan_multi_account_2026-11-19.md`.
+my-setup's `claude-account` lets one machine run sessions on several claude.ai accounts: account **a** is Claude Code's default folder `~/.claude` (the **main account**, what every reader, every scheduled job and a plain `claude` mean), account `b`... is `~/.claude/account-b/` (its sessions have `CLAUDE_CONFIG_DIR` set to it and `CLAUDE_ACCOUNT=b`). An account's id is its **organization uuid** (`oauthAccount.organizationUuid` of its `.claude.json`; header `anthropic-organization-id`; telemetry attribute `organization.id`): the same on every machine. The plan: `doc/plan_multi_account_2026-11-19.md`. The overview for the user (why, designs, how to use it, every piece across the repos): `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
 
 ```
 session on account b ──tick──► account_quotas (account = uuid of b) ──► latest_by_account ──► quota_latest.b.json ──► status line of b
