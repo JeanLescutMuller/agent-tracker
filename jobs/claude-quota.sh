@@ -22,6 +22,10 @@ limit=290 idle=480 sync=
 [ $JR_MACHINE_NAME = chan-lescut-macbook-pro ] && limit=110 idle=300 sync="--sync-with=babisnas-tailscale --sync-every=110"
 [ "$(python3 src/agent_tracker.py last-seen-age --agent claude 2>/dev/null || echo 999999999)" -lt 90 ] || limit=$idle   # a status line on screen here
 
+# An update of Claude Code replaces ~/.local/bin/claude (my-setup puts its account-choosing script there, so that jobs and the
+# SDK get it): put it back, silently, within a minute. Not our business when my-setup is not installed.
+[ -x "$HOME/opt/my-setup/bin/claude-account" ] && "$HOME/opt/my-setup/bin/claude-account" --heal >/dev/null 2>&1
+
 # The poller: sync when due (Mac), then a poll only if the newest reading is $limit s old or more
 jr_execute 1 python3 src/claude_quota_api_poller.py $sync --if-older-than=$limit
 case $JR_RC in
