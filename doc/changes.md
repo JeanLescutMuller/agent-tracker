@@ -51,3 +51,7 @@ Every change to what agent-tracker (agent-usage-tracker until 2026-11) captures,
 ## 2026-11-19: several Claude accounts
 
 `account_quotas.account` (organization uuid; NULL before = the main account), table `accounts`, view `latest` limited to the main account, view `latest_by_account`, `telemetry.account`; the poller polls each account logged in on the machine; `tick` files each session's quota under its session's account (`quota_latest.<name>.json` for an account other than a); lifecycle `start` lines carry `account`. Migration `adhoc_quotas_analysis/migrate_to_target.py accounts-v4` (archives first; idempotent). Design: `doc/design.md` §3.5; plan: `doc/plan_multi_account_2026-11-19.md`.
+
+## 2026-11-20: the job of each slot
+
+`slots.job`, in the key (`ts`, `machine`, `folder`, `entrypoint`, `job`, `model`): the job-runner job that started the session, read from the resource attribute `job.name` of its telemetry; job-runner's `lib.sh` exports it since the same day (its commit 8154f1d). Why: the user wants scheduled jobs split by job name, and interactive sessions (their subagents and the `claude -p` they run included) by folder; `entrypoint` alone mixed the two (a `claude -p` run from an interactive session is `sdk-cli` too). Every slot written before has `job` `''` (unknown, never backfilled). Layout step `migrate_to_target.py slots-job` (archives first, keeps every rowid). A sender older than the column is still accepted by the gate (`job` `''`).

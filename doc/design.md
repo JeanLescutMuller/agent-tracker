@@ -18,7 +18,7 @@ agent-usage-tracker until 2026-11 (renamed when it grew the session files, §14)
 |---|---|---|---|---|
 | **1 · Quotas** | the account's quota readings (5-hour and 7-day %, reset times); failed polls | raw: lost if not stored | both machines, the same rows, synced both ways every 2 min | 2 |
 | **2 · Machine raw** | `sessions_usages.db` (telemetry, statusline session snapshots) + Claude Code's transcripts | raw | **never leaves its machine** | 1 (accepted) |
-| **3 · Aggregates** | Category 2 added up per 5-min slot × machine × folder × entrypoint × model: one table, `slots` | computed from 2 | each machine computes its own every 5 min; the Mac sends its rows to the VM | 2 for the Mac's rows |
+| **3 · Aggregates** | Category 2 added up per 5-min slot × machine × folder × entrypoint × job × model: one table, `slots` | computed from 2 | each machine computes its own every 5 min; the Mac sends its rows to the VM | 2 for the Mac's rows |
 | **4 · Meta-analysis** | $ or tokens per window, past use by project, machine, interactive vs scheduled | computed from 1 + 3 | **not here: a reader's** (`FOR_READERS.md`) | — |
 
 Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machines.
@@ -58,7 +58,7 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 | 2 | same | `telemetry` + view `telemetry_requests` | one telemetry event (the view: one per request) | tokens + Claude Code's $ per request | Claude Code (OTLP) |
 | 2 | `~/.claude/projects/**/*.jsonl` | — | Claude Code's own transcript lines | tokens per request, `cost-state` per session | Claude Code (deletes them after 365 days) |
 | — | `data/claude/intermediary.db` (local, never sent) | `requests`, `scans`, `offsets` | one request counted once; one reader run; one transcript file | tokens; "complete through" time; how far read | Category 2; deletable, rebuilt from it (§5) |
-| 3 | `data/claude/aggregates/<machine>.db`: one file per machine, each machine its own; the VM also keeps the Mac's, as received | `slots` | 5-min slot × machine × folder × entrypoint × model | 6 token columns (input, output, cache read, cache write 5m / 1h / unknown) + Claude Code's $ where telemetry has it + tokens without $ | transcripts + telemetry, through `intermediary.db` |
+| 3 | `data/claude/aggregates/<machine>.db`: one file per machine, each machine its own; the VM also keeps the Mac's, as received | `slots` | 5-min slot × machine × folder × entrypoint × job × model | 6 token columns (input, output, cache read, cache write 5m / 1h / unknown) + Claude Code's $ where telemetry has it + tokens without $ | transcripts + telemetry, through `intermediary.db` |
 | 4 | — | — | a reader builds it from 1 + 3 | — | — |
 
 ```
@@ -215,6 +215,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 | `machine` | TEXT NOT NULL | where the requests ran |
 | `folder` | TEXT NOT NULL | the session's working directory; `''` when unknown |
 | `entrypoint` | TEXT NOT NULL | as Claude Code wrote it: `cli` (interactive), `sdk-cli` (`claude -p`), `sdk-py` (Agent SDK), …; `''` when unknown |
+| `job` | TEXT NOT NULL | the job-runner job whose program started the session (`<repo>` or `<repo>.<job>`, e.g. `jobs.apply`), from the resource attribute `job.name` of the session's telemetry; `''` = no job: an interactive session, its subagents and the `claude -p` it ran, a session without telemetry, and every slot before 2026-11-20 (since 2026-11-20) |
 | `model` | TEXT NOT NULL | e.g. `claude-opus-5-5` |
 | `requests` | INTEGER | number of requests |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_5m_tokens`, `cache_write_1h_tokens` | INTEGER | sums, from the transcripts |
@@ -223,7 +224,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 | `tokens_without_usd` | INTEGER | all tokens of the requests with no telemetry: the part `usd` does not cover |
 | `written_ts` | INTEGER | when the row was written |
 
-Key: UNIQUE (`ts`, `machine`, `folder`, `entrypoint`, `model`). Written once, when final; never changed. No percent, ever. Example, two real requests:
+Key: UNIQUE (`ts`, `machine`, `folder`, `entrypoint`, `job`, `model`). Written once, when final; never changed. No percent, ever. Example, two real requests:
 
 ```
 ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/trading-bot · cli · claude-opus-5-5
@@ -239,7 +240,8 @@ requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 72
    + telemetry-only requests (prompt suggestions, summaries, web search, titles, compaction: 9.2% of the $)
        placed by their event time; folder and entrypoint from the same session's transcript requests;
        their cache writes → cache_write_unknown_tokens
-3. sum per (slot, machine, folder, entrypoint, model) → ingest_aggregates.py → data/claude/aggregates/<this machine>.db
+       job: the session's telemetry resource job.name (job-runner exports it to every program a job starts); '' = none
+3. sum per (slot, machine, folder, entrypoint, job, model) → ingest_aggregates.py → data/claude/aggregates/<this machine>.db
 4. Mac only: send the new slots to the VM (§6.4)
 ```
 

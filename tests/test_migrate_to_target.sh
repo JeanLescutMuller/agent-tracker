@@ -235,7 +235,7 @@ old.execute("INSERT INTO scans VALUES (900, 'x', 600, 2)"); old.commit()
 def slots(path, machine, l_ts):
     db = usage_db.connect(usage_db.Path(path), usage_db.AGGREGATES_SCHEMA)
     for t in l_ts:
-        db.execute("INSERT INTO slots VALUES (?, ?, ?, '/a', 'cli', 'm', 1, 1, 1, 1, 0, 0, 0, NULL, 3, 1)", (t, usage_db.iso(t), machine))
+        db.execute("INSERT INTO slots VALUES (?, ?, ?, '/a', 'cli', '', 'm', 1, 1, 1, 1, 0, 0, 0, NULL, 3, 1)", (t, usage_db.iso(t), machine))
 slots(f"{sys.argv[1]}/data/claude/aggregates.db", "m1", (300, 600))
 slots(f"{sys.argv[1]}/central/mac/data/claude/aggregates.db", "mac", (900,))
 PY2
@@ -257,7 +257,7 @@ L2="$TMP/layout2"
 mkdir -p "$L2/data/claude"
 AGENT_USAGE_TRACKER_RUNTIME="$L2" python3 -c "import sys; sys.path.insert(0, '$REPO_ROOT/src'); import usage_db
 db = usage_db.connect(usage_db.Path('$L2/data/claude/aggregates.db'), usage_db.AGGREGATES_SCHEMA)
-db.execute(\"INSERT INTO slots VALUES (300, 'x', 'm2', '', '', 'm', 1, 1, 1, 1, 0, 0, 0, NULL, 3, 1)\")"
+db.execute(\"INSERT INTO slots VALUES (300, 'x', 'm2', '', '', '', 'm', 1, 1, 1, 1, 0, 0, 0, NULL, 3, 1)\")"
 th_run env MIGRATE_SKIP_BUSY_CHECK=1 JR_MACHINE_NAME=m1 python3 "$MIGRATE" data-layout --runtime "$L2"
 assert_status "a file holding another machine's slots: refused" 1 "$TH_STATUS"
 assert_file_exists "...and left in place" "$L2/data/claude/aggregates.db"
@@ -289,5 +289,37 @@ assert_eq "archived before the change" "2" "$(ls "$A4"/data/_archive/*pre-accoun
 th_run python3 "$MIGRATE" accounts-v4 --runtime "$A4"
 assert_status "second run ok" 0 "$TH_STATUS"
 assert_eq "...no second archive" "2" "$(ls "$A4"/data/_archive/*pre-accounts-* | wc -l | tr -d ' ')"
+
+section "slots-job: slots rebuilt with job, every rowid kept, archived first; idempotent"
+SJ="$TMP/sj"; mkdir -p "$SJ/data/claude/aggregates"
+python3 - "$SJ/data/claude/aggregates/m1.db" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.executescript("""CREATE TABLE slots (ts INTEGER NOT NULL, dt TEXT NOT NULL, machine TEXT NOT NULL, folder TEXT NOT NULL,
+  entrypoint TEXT NOT NULL, model TEXT NOT NULL, requests INTEGER NOT NULL, input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL, cache_read_tokens INTEGER NOT NULL, cache_write_5m_tokens INTEGER NOT NULL,
+  cache_write_1h_tokens INTEGER NOT NULL, cache_write_unknown_tokens INTEGER NOT NULL, usd REAL,
+  tokens_without_usd INTEGER NOT NULL, written_ts INTEGER NOT NULL, UNIQUE (ts, machine, folder, entrypoint, model));
+CREATE INDEX slots_machine_ts ON slots(machine, ts);""")
+for rowid, ts in ((5, 300), (9, 600)):
+    db.execute("INSERT INTO slots (rowid, ts, dt, machine, folder, entrypoint, model, requests, input_tokens, output_tokens, "
+               "cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, cache_write_unknown_tokens, usd, "
+               "tokens_without_usd, written_ts) VALUES (?, ?, 'x', 'm1', '/a', 'cli', 'opus', 2, 1, 1, 0, 0, 0, 0, 0.5, 0, 1)",
+               (rowid, ts))
+db.commit()
+PY
+th_run python3 "$MIGRATE" slots-job --runtime "$SJ"
+assert_status "first run ok" 0 "$TH_STATUS"
+qs() { python3 -c 'import sqlite3, sys
+for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]): print("\t".join("" if v is None else str(v) for v in r))' "$SJ/data/claude/aggregates/m1.db" "$1"; }
+assert_eq "every row kept, its rowid too, job ''" "5	300		2	0.5
+9	600		2	0.5" "$(qs "SELECT rowid, ts, job, requests, usd FROM slots ORDER BY rowid")"
+assert_contains "the new key holds job" "$(qs "SELECT sql FROM sqlite_master WHERE name = 'slots'")" "UNIQUE (ts, machine, folder, entrypoint, job, model)"
+assert_eq "the index is back" "slots_machine_ts" "$(qs "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'slots' AND sql IS NOT NULL")"
+assert_eq "archived first" "1" "$(ls "$SJ"/data/_archive/*pre-slots-job-* | wc -l | tr -d ' ')"
+th_run python3 "$MIGRATE" slots-job --runtime "$SJ"
+assert_status "second run ok" 0 "$TH_STATUS"
+assert_contains "...says it is there" "$TH_OUT" "slots.job already there"
+assert_eq "...no second archive" "1" "$(ls "$SJ"/data/_archive/*pre-slots-job-* | wc -l | tr -d ' ')"
 
 harness_summary

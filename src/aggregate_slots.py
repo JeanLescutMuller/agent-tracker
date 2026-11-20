@@ -10,7 +10,11 @@ every 5 min:
      search, titles, compaction), placed by their event time, with the
      folder and entrypoint of the same session's transcript requests and
      their cache writes as cache_write_unknown_tokens (telemetry gives no
-     5m / 1h split); summed per (slot, machine, folder, entrypoint, model);
+     5m / 1h split); each request with its session's job: the resource
+     attribute job.name of the session's telemetry, set by job-runner for
+     every program a job starts ('' = no job: an interactive session, its
+     subagents and the `claude -p` it starts); summed per (slot, machine,
+     folder, entrypoint, job, model);
   3. handed to ingest_aggregates.py, the only writer of the aggregates files;
   4. with --send-to=HOST (the Mac): every slot not sent yet goes to the
      file of the same name on HOST (push_to_central.py). A failed send is retried
@@ -40,11 +44,15 @@ import transcript_reader
 import usage_db
 
 SLOT_S = 300
+# The job of a session: job-runner exports OTEL_RESOURCE_ATTRIBUTES=job.name=<job> (since 2026-11-20), so Claude Code
+# puts it in every telemetry event of the sessions a job starts, and of their subagents (same session id).
+JOB_SQL = ("COALESCE((SELECT json_extract(raw, '$.resource.\"job.name\"') FROM s.telemetry "
+           "WHERE session_id = {session} AND raw LIKE '%\"job.name\"%' LIMIT 1), '')")
 
 # Every request of the slots in [:start, :end), one row each: transcript
 # requests, then telemetry-only requests. `s` is the attached sessions_usages.db.
 REQUESTS_SQL = """
-SELECT (r.ts / 300) * 300, COALESCE(r.folder, ''), COALESCE(r.entrypoint, ''), COALESCE(r.model, ''),
+SELECT (r.ts / 300) * 300, COALESCE(r.folder, ''), COALESCE(r.entrypoint, ''), {job_r}, COALESCE(r.model, ''),
        r.input_tokens, r.output_tokens, r.cache_read_tokens, r.cache_write_5m_tokens, r.cache_write_1h_tokens, 0,
        t.cost_usd
 FROM requests r LEFT JOIN s.telemetry_requests t ON t.request_id = r.request_id
@@ -53,14 +61,14 @@ UNION ALL
 SELECT (t.ts / 300) * 300,
        COALESCE((SELECT folder FROM requests WHERE session_id = t.session_id AND folder IS NOT NULL LIMIT 1), ''),
        COALESCE((SELECT entrypoint FROM requests WHERE session_id = t.session_id AND entrypoint IS NOT NULL LIMIT 1), ''),
-       COALESCE(t.model, ''), COALESCE(t.input_tokens, 0), COALESCE(t.output_tokens, 0), COALESCE(t.cache_read_tokens, 0),
+       {job_t}, COALESCE(t.model, ''), COALESCE(t.input_tokens, 0), COALESCE(t.output_tokens, 0), COALESCE(t.cache_read_tokens, 0),
        0, 0, COALESCE(t.cache_creation_tokens, 0), t.cost_usd
 FROM s.telemetry_requests t
 WHERE t.ts >= :start AND t.ts < :end AND NOT EXISTS (SELECT 1 FROM requests r WHERE r.request_id = t.request_id)
-"""
+""".format(job_r=JOB_SQL.format(session="r.session_id"), job_t=JOB_SQL.format(session="t.session_id"))
 # Without a sessions database (no telemetry yet on this machine): transcript requests only.
 REQUESTS_ONLY_SQL = """
-SELECT (ts / 300) * 300, COALESCE(folder, ''), COALESCE(entrypoint, ''), COALESCE(model, ''),
+SELECT (ts / 300) * 300, COALESCE(folder, ''), COALESCE(entrypoint, ''), '', COALESCE(model, ''),
        input_tokens, output_tokens, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, 0, NULL
 FROM requests WHERE ts >= :start AND ts < :end
 """
@@ -83,10 +91,10 @@ def final_slots(now: int) -> tuple[list[dict], int, int]:
     if sessions.exists():
         inter.execute("ATTACH DATABASE ? AS s", (str(sessions),))
     d_slots = {}
-    for slot, folder, entrypoint, model, i, o, cr, w5, w1, wu, usd in inter.execute(
+    for slot, folder, entrypoint, job, model, i, o, cr, w5, w1, wu, usd in inter.execute(
             REQUESTS_SQL if sessions.exists() else REQUESTS_ONLY_SQL, {"start": start, "end": end}):
-        d = d_slots.setdefault((slot, folder, entrypoint, model), dict(
-            ts=slot, dt=usage_db.iso(slot), machine=me, folder=folder, entrypoint=entrypoint, model=model,
+        d = d_slots.setdefault((slot, folder, entrypoint, job, model), dict(
+            ts=slot, dt=usage_db.iso(slot), machine=me, folder=folder, entrypoint=entrypoint, job=job, model=model,
             requests=0, input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_write_5m_tokens=0,
             cache_write_1h_tokens=0, cache_write_unknown_tokens=0, usd=None, tokens_without_usd=0, written_ts=now))
         d["requests"] += 1
@@ -97,7 +105,7 @@ def final_slots(now: int) -> tuple[list[dict], int, int]:
             d["tokens_without_usd"] += i + o + cr + w5 + w1 + wu
         else:
             d["usd"] = (d["usd"] or 0.0) + usd
-    return sorted(d_slots.values(), key=lambda d: (d["ts"], d["folder"], d["entrypoint"], d["model"])), start, end
+    return sorted(d_slots.values(), key=lambda d: (d["ts"], d["folder"], d["entrypoint"], d["job"], d["model"])), start, end
 
 
 def main(argv: list[str] | None = None) -> None:

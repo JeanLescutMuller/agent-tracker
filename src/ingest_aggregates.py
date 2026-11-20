@@ -6,7 +6,8 @@ and, on the VM, the Mac's copy (through receive_from_machine.py).
 It checks each `slots` row - every column there, of the right type, ts a
 multiple of 300, counts not negative, the machine of the file it goes into
 (one file per machine, P14), no extra key (so never a quota percent:
-doc/tables.md §1) - and inserts it
+doc/tables.md §1); a row without `job` (a sender older than 2026-11-20)
+gets '' - and inserts it
 with INSERT OR IGNORE: a slot is written once, when final, and never
 changes; the same slot sent twice is a no-op.
 """
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import usage_db
 
-SLOT_COLUMNS = ("ts", "dt", "machine", "folder", "entrypoint", "model", "requests", "input_tokens", "output_tokens",
+SLOT_COLUMNS = ("ts", "dt", "machine", "folder", "entrypoint", "job", "model", "requests", "input_tokens", "output_tokens",
                 "cache_read_tokens", "cache_write_5m_tokens", "cache_write_1h_tokens", "cache_write_unknown_tokens",
                 "usd", "tokens_without_usd", "written_ts")
 COUNT_COLUMNS = ("requests", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_5m_tokens",
@@ -25,6 +26,8 @@ MACHINE_RE = re.compile(r"[A-Za-z0-9-]+")
 
 def check(d_slot: dict, machine: str) -> list:
     """The row's values in SLOT_COLUMNS order; ValueError when it must not be stored."""
+    if isinstance(d_slot, dict) and "job" not in d_slot:
+        d_slot = {**d_slot, "job": ""}   # a sender older than the column: no job known
     if not isinstance(d_slot, dict) or set(d_slot) != set(SLOT_COLUMNS):
         raise ValueError(f"a slot has exactly the columns {SLOT_COLUMNS}")
     for key in ("ts", "written_ts") + COUNT_COLUMNS:
@@ -38,7 +41,7 @@ def check(d_slot: dict, machine: str) -> list:
         raise ValueError(f"not a machine name: {d_slot['machine']!r}")
     if d_slot["machine"] != machine:
         raise ValueError(f"a slot of {d_slot['machine']!r} in the file of {machine!r}")
-    for key in ("folder", "entrypoint", "model"):
+    for key in ("folder", "entrypoint", "job", "model"):
         if not isinstance(d_slot[key], str):
             raise ValueError(f"{key} is not text: {d_slot[key]!r}")
     if d_slot["usd"] is not None and (isinstance(d_slot["usd"], bool) or not isinstance(d_slot["usd"], (int, float))):

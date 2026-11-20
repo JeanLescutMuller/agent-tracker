@@ -20,12 +20,13 @@ for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]):
     print("\t".join("" if v is None else str(v) for v in r))' "$ADB" "$1"; }
 # req <ts> <id> <session> <folder> <entrypoint> <model> <in> <out> <cache read> <write 5m> <write 1h>: an intermediary request
 req() { py "db = usage_db.open_intermediary('claude'); db.execute('INSERT INTO requests VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', ($1, usage_db.iso($1), '$2', '$3', '$4', '$5', '$6', $7, $8, $9, ${10}, ${11}))"; }
-# tel <ts> <request id> <session> <model> <in> <out> <cache read> <cache creation> <cost or None>: a telemetry event
-tel() { py "db = usage_db.open_sessions('claude'); s.add_telemetry(db, {'source': 'claude_otel', 'observed_at': $1, 'received_at': $1, 'event': 'api_request', 'attributes': {'session.id': '$3', 'request_id': '$2', 'model': '$4', 'input_tokens': $5, 'output_tokens': $6, 'cache_read_tokens': $7, 'cache_creation_tokens': $8, **({} if '$9' == 'None' else {'cost_usd': $9})}})"; }
+# tel <ts> <request id> <session> <model> <in> <out> <cache read> <cache creation> <cost or None> [job]: a telemetry
+# event; with a job, the resource attribute job.name job-runner gives every program a job starts
+tel() { py "db = usage_db.open_sessions('claude'); s.add_telemetry(db, {'source': 'claude_otel', 'observed_at': $1, 'received_at': $1, 'event': 'api_request', 'resource': {'service.name': 'claude-code', **({'job.name': '${10:-}'} if '${10:-}' else {})}, 'attributes': {'session.id': '$3', 'request_id': '$2', 'model': '$4', 'input_tokens': $5, 'output_tokens': $6, 'cache_read_tokens': $7, 'cache_creation_tokens': $8, **({} if '$9' == 'None' else {'cost_usd': $9})}})"; }
 scan() { py "db = usage_db.open_intermediary('claude'); db.execute('INSERT INTO scans VALUES (?,?,?,0)', ($1, usage_db.iso($1), $2))"; }
 # run <now>: one run, without reading transcripts
 run() { py "import time; a.transcript_reader.main = lambda: ''; time.time = lambda: $1; a.main()"; }
-COLS="ts, folder, entrypoint, model, requests, input_tokens, output_tokens, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, cache_write_unknown_tokens, ROUND(usd, 4), tokens_without_usd"
+COLS="ts, folder, entrypoint, job, model, requests, input_tokens, output_tokens, cache_read_tokens, cache_write_5m_tokens, cache_write_1h_tokens, cache_write_unknown_tokens, ROUND(usd, 4), tokens_without_usd"
 
 req 1000 r1 $S1 /a cli opus 1 10 100 5 7
 req 1100 r2 $S1 /a cli opus 2 20 200 0 0
@@ -33,36 +34,54 @@ req 1300 r3 $S2 /b sdk-py sonnet 3 30 300 0 0
 req 2000 r4 $S1 /a cli opus 4 40 400 0 0
 tel 1010 r1 $S1 opus 1 10 100 12 0.5
 tel 1010 r1 $S1 opus 1 10 100 12 0.5     # a batch Claude Code sent twice: counted once
-tel 1310 r3 $S2 sonnet 3 30 300 0 0.25
+tel 1310 r3 $S2 sonnet 3 30 300 0 0.25 jobs.apply   # S2 was started by the job jobs.apply
 tel 1150 t1 $S1 haiku 4 40 400 30 0.1    # telemetry only (a title): the folder of its session
 tel 1250 t2 $SX haiku 5 50 500 0 None    # telemetry only, a session without transcript, no cost
 scan 1950 1900
 
 section "the final slots: those ended by the scan's complete_through"
 assert_contains "three slots in two final 5-min slots (900, 1200); 1500 is empty, 1800 not final" "$(run 2000)" "slots: 4 written"
-assert_eq "per (slot, folder, entrypoint, model)" "900	/a	cli	haiku	1	4	40	400	0	0	30	0.1	0
-900	/a	cli	opus	2	3	30	300	5	7	0	0.5	222
-1200			haiku	1	5	50	500	0	0	0		555
-1200	/b	sdk-py	sonnet	1	3	30	300	0	0	0	0.25	0" "$(q "SELECT $COLS FROM slots ORDER BY ts, model")"
+assert_eq "per (slot, folder, entrypoint, job, model); job '' = no job" "900	/a	cli		haiku	1	4	40	400	0	0	30	0.1	0
+900	/a	cli		opus	2	3	30	300	5	7	0	0.5	222
+1200				haiku	1	5	50	500	0	0	0		555
+1200	/b	sdk-py	jobs.apply	sonnet	1	3	30	300	0	0	0	0.25	0" "$(q "SELECT $COLS FROM slots ORDER BY ts, model")"
 assert_eq "machine, dt, written_ts" "m1	1970-01-01T00:15:00Z	2000" "$(q "SELECT DISTINCT machine, dt, written_ts FROM slots WHERE ts = 900")"
 
 section "each slot written once; later slots when they become final"
 assert_contains "nothing new: nothing written" "$(run 2100)" "slots: 0 written"
 scan 2500 2400
 assert_contains "the 1800 slot once final" "$(run 2500)" "slots: 1 written"
-assert_eq "...with r4" "1800	/a	cli	opus	1	4	40	400	0	0	0		444" "$(q "SELECT $COLS FROM slots WHERE ts = 1800")"
+assert_eq "...with r4" "1800	/a	cli		opus	1	4	40	400	0	0	0		444" "$(q "SELECT $COLS FROM slots WHERE ts = 1800")"
 assert_eq "no slot twice" "5" "$(q "SELECT COUNT(*) FROM slots")"
 
+section "the job: one job's session, its subagent and its telemetry-only requests under its name; another job apart"
+req 2700 r5 $S2 /b sdk-py sonnet 1 1 0 0 0          # S2 again (the job jobs.apply): no job.name on this request's event
+req 2710 r6 $S2 /b sdk-py sonnet 1 1 0 0 0          # a subagent of S2: same session id
+S3=33333333-3333-3333-3333-333333333333
+req 2720 r7 $S3 /b sdk-py sonnet 1 1 0 0 0          # another job, same folder, entrypoint and model
+tel 2721 r7 $S3 sonnet 1 1 0 0 0.01 tasks.launch
+tel 2730 t3 $S2 haiku 1 1 0 0 0.02                  # a title of S2, telemetry only
+req 2740 r8 $S1 /b sdk-cli sonnet 1 1 0 0 0         # claude -p started by hand: no job
+scan 3100 3000
+run 3100 >/dev/null
+assert_eq "per job, the same folder" "2700	/b	sdk-cli		sonnet	1
+2700	/b	sdk-py	jobs.apply	haiku	1
+2700	/b	sdk-py	jobs.apply	sonnet	2
+2700	/b	sdk-py	tasks.launch	sonnet	1" "$(q "SELECT ts, folder, entrypoint, job, model, requests FROM slots WHERE ts = 2700 ORDER BY entrypoint, job, model")"
+
 section "the gate"
-good="dict(ts=600, dt=usage_db.iso(600), machine='m1', folder='', entrypoint='', model='x', requests=1, input_tokens=1, output_tokens=1, cache_read_tokens=0, cache_write_5m_tokens=0, cache_write_1h_tokens=0, cache_write_unknown_tokens=0, usd=None, tokens_without_usd=2, written_ts=1)"
+good="dict(ts=600, dt=usage_db.iso(600), machine='m1', folder='', entrypoint='', job='', model='x', requests=1, input_tokens=1, output_tokens=1, cache_read_tokens=0, cache_write_5m_tokens=0, cache_write_1h_tokens=0, cache_write_unknown_tokens=0, usd=None, tokens_without_usd=2, written_ts=1)"
 assert_eq "a valid slot" "1" "$(py "print(g.add_slots(usage_db.open_aggregates('claude'), [$good]))")"
 assert_eq "the same slot again: a no-op" "0" "$(py "print(g.add_slots(usage_db.open_aggregates('claude'), [$good]))")"
 assert_contains "rejected: a slot of another machine (one file per machine)" "$(py "g.add_slots(usage_db.open_aggregates('claude'), [$good | dict(machine='m2')])" 2>&1)" "a slot of 'm2' in the file of 'm1'"
 assert_eq "...while m2's own file takes it" "1" "$(py "print(g.add_slots(usage_db.open_aggregates('claude', machine='m2'), [$good | dict(machine='m2')]))")"
-for bad in "ts=601" "dt='x'" "machine='a b'" "requests=-1" "usd='1'" "five_hour_pct=3"; do
+for bad in "ts=601" "dt='x'" "machine='a b'" "requests=-1" "usd='1'" "job=None" "five_hour_pct=3"; do
     assert_contains "rejected: $bad" "$(py "g.add_slots(usage_db.open_aggregates('claude'), [$good | dict($bad)])" 2>&1)" "ValueError"
 done
-assert_eq "a bad row rejects its whole batch" "6" \
+assert_eq "a slot from a sender older than job: job ''" "1
+[]" \
+    "$(py "d = $good; del d['job']; print(g.add_slots(usage_db.open_aggregates('claude'), [d | dict(ts=900, dt=usage_db.iso(900))]))"; q "SELECT '[' || job || ']' FROM slots WHERE ts = 900 AND model = 'x'")"
+assert_eq "a bad row rejects its whole batch" "11" \
     "$(py "
 try: g.add_slots(usage_db.open_aggregates('claude'), [$good | dict(ts=3000, dt=usage_db.iso(3000)), $good | dict(ts=3001)])
 except ValueError: pass" ; q "SELECT COUNT(*) FROM slots")"

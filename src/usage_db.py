@@ -244,12 +244,13 @@ CREATE VIEW usage_5m AS
 # final, and never changes; the Mac's file is sent to the VM, into the file
 # of the same name there. Written only by ingest_aggregates.py.
 AGGREGATES_SCHEMA = """
-CREATE TABLE slots (                 -- one row per 5-min slot × machine × folder × entrypoint × model
+CREATE TABLE slots (                 -- one row per 5-min slot × machine × folder × entrypoint × job × model
     ts INTEGER NOT NULL,              -- slot start, a multiple of 300
     dt TEXT NOT NULL,
     machine TEXT NOT NULL,            -- where the requests ran
     folder TEXT NOT NULL,             -- the session's working directory (cwd); '' when unknown
     entrypoint TEXT NOT NULL,         -- cli (interactive terminal), sdk-cli (claude -p), sdk-py (Agent SDK), ...; '' when unknown
+    job TEXT NOT NULL DEFAULT '',     -- the job-runner job that started the session (<repo> or <repo>.<job>); '' = none, or before 2026-11-20
     model TEXT NOT NULL,
     requests INTEGER NOT NULL,
     input_tokens INTEGER NOT NULL,
@@ -261,7 +262,7 @@ CREATE TABLE slots (                 -- one row per 5-min slot × machine × fol
     usd REAL,                         -- Claude Code's own cost_usd (telemetry), summed over the requests that have one; NULL: none has
     tokens_without_usd INTEGER NOT NULL,          -- every token of the requests with no cost_usd: what usd does not cover
     written_ts INTEGER NOT NULL,
-    UNIQUE (ts, machine, folder, entrypoint, model)
+    UNIQUE (ts, machine, folder, entrypoint, job, model)
 );
 CREATE INDEX slots_machine_ts ON slots(machine, ts);
 """
