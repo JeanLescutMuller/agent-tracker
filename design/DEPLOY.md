@@ -45,4 +45,4 @@ All five branches merge into `main` without conflict (checked with `git merge-tr
 | no `tick` for Codex | no `last_seen.json` for Codex sessions; agent-notify keeps `AGENT_TYPE` for them | Codex's statusline is a patched TUI; open |
 | Linux paths (the VM) untested | the deploy's VM step is the first real run | no Linux here |
 | agent-notify: one more `tmux list-panes -a` per color update | not timed | agent-notify's report |
-| the integration test does not cover agent-notify (a Claude plugin), iTerm2 tabs (`--no-iterm`) or the VM sync | covered only by each repo's own tests | sandbox limits |
+| the integration test does not cover agent-notify (a Claude plugin), iTerm2 tabs (`--no-iterm`) or agent-resume's other machines (`remote_hosts`) | covered only by each repo's own tests | sandbox limits |

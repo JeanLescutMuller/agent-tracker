@@ -324,7 +324,7 @@ authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Clau
 
     <div class="sep">unchanged or lighter (scope still open)</div>
     <div class="row">
-      <div class="w c-asm bg-asm"><div class="who">agent-resume</div><div class="stream">search index</div><div><span class="trig good">🔍 refreshed when you search</span><span class="trig">⚡ SessionEnd (VM sync)</span></div><div class="note">the 1800 s job can go, if the VM sync doesn't need it</div></div>
+      <div class="w c-asm bg-asm"><div class="who">agent-resume</div><div class="stream">search index</div><div><span class="trig good">🔍 refreshed when you search</span></div><div class="note">the 1800 s job, the SessionEnd hook and the VM sync are gone (2026-11-20): other machines are searched over ssh at search time</div></div>
       <div class="arrow">→</div>
       <div class="f"><div class="path">~/opt/agent-resume/data/indexes/&lt;uuid&gt;.json</div><pre>{"session_id":"…","custom_title":"…","created_at":"…","last_active":"…", text…}
 minus session_state → "ended" file</pre><div class="note">last_active is never late: refreshed at search time</div></div>
@@ -645,7 +645,6 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
   <table>
     <tbody>
       <tr><td>Does Claude Code run the statusline while its pane is hidden (another tmux window)?</td><td>decides whether last seen means "open" or "on screen", the 2-min rule of ares tmux's crash step, and the tick count (5,040 / hour with 14 open) · test in step 2</td></tr>
-      <tr><td>Does the VM sync still need agent-resume's 1800 s job?</td><td>if not, it goes</td></tr>
       <tr><td>Codex: statusline interval, SessionEnd hook</td><td>not measured: no Codex session today</td></tr>
       <tr><td>Why continuum saved 2 times in 30 min instead of 6</td><td>moot if it is removed</td></tr>
     </tbody>

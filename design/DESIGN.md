@@ -64,7 +64,7 @@ Sources: a read-only inventory of the repos (file:line in the inventory report),
 | 2 · index every 5 min | 288 runs / day | each: dates of all transcripts (4 ms [verified]) + re-read the changed ones + ~50 ms Python start [assumed] | ≤ 5 min | yes, the index |
 | **3 · when asked (chosen)** | none | per question: dates 4 ms + the end of the changed transcripts; worst case all 3,014 (2.5 GB): 1.85 s [verified 2026-11-07] | 0 | none |
 
-**Why:** no work while nobody asks, no lag, nothing to keep in sync. It can also replace agent-resume's 1800 s job, if the VM sync does not need it (open point).
+**Why:** no work while nobody asks, no lag, nothing to keep in sync. It replaced agent-resume's 1800 s job: removed on 2026-11-20, with the VM sync (agent-resume's `DEV_DOC.md` R6.4: other machines are searched over ssh at search time, a session resumes on its own machine).
 
 ## 4. Files, and why there are no write collisions
 
@@ -232,7 +232,6 @@ agent-auto-close  closing             close by hand (← asm close) + when to cl
 ## Open points
 
 - Does Claude Code run the statusline while its pane is hidden (another tmux window)? Decides whether last seen means "open" or "on screen", the 2-min rule of ares tmux's crash step, and the tick count (up to 5,040 / hour with 14 open Claude sessions); test in step 2.
-- Does the VM sync still need agent-resume's 1800 s job?
 - Codex: statusline interval and SessionEnd hook, not measured (no Codex session today).
 - Why continuum saved 2 times in 30 min instead of 6: moot if it is removed.
 
