@@ -25,7 +25,7 @@ COMMANDS = {"SessionStart": "$HOME/.local/bin/agent-tracker hook start",
             "SessionEnd": "$HOME/.local/bin/agent-tracker hook end"}
 
 settings_path = Path(os.environ.get("CLAUDE_SETTINGS") or
-                     Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "settings.json")
+                     Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "settings.json").resolve()  # a link (account b's settings.json -> ../settings.json): write its target, never replace the link (2026-11-21)
 mode = sys.argv[1]
 
 if not settings_path.exists():

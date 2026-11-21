@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 settings_path = Path(os.environ.get("CLAUDE_SETTINGS") or
-                     Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "settings.json")
+                     Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "settings.json").resolve()  # a link (account b's settings.json -> ../settings.json): write its target, never replace the link (2026-11-21)
 d_owned = json.loads((Path(__file__).resolve().parent / "claude_telemetry_env.json").read_text())
 mode = sys.argv[1]
 
