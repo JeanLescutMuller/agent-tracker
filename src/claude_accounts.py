@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The Claude accounts of THIS machine (2026-11-19; my-setup's `claude-account`, doc/plan_multi_account_2026-11-19.md).
 
-  account a    the main account: Claude Code's default folder ~/.claude (its login: ~/.claude.json and the Keychain item
+  account a    the main account. Symmetrical since 2026-11-21: ~/.claude/account-a/ like b, once it holds a login (a_moved());
+               before that, legacy: Claude Code's default folder ~/.claude (its login: ~/.claude.json and the Keychain item
                "Claude Code-credentials", on Linux ~/.claude/.credentials.json); what every reader means by "the account"
   account NAME ~/.claude/account-NAME/ (CLAUDE_CONFIG_DIR of its sessions): its own .claude.json and login
 
@@ -42,11 +43,25 @@ def _org_uuid(claude_json: Path) -> str | None:
     return uuid if isinstance(uuid, str) and UUID_RE.fullmatch(uuid) else None
 
 
+def a_folder() -> Path:
+    return home_dir() / "account-a"
+
+
+def a_moved() -> bool:
+    """Account a lives in ~/.claude/account-a once that folder holds a login (my-setup's claude-account --login a): until then it
+    is legacy, Claude's default folder ~/.claude with ~/.claude.json and the Keychain item "Claude Code-credentials"."""
+    return _org_uuid(a_folder() / ".claude.json") is not None
+
+
 def local_accounts() -> list[dict]:
-    """[{name, config_dir, org_uuid (None when not logged in), is_main}], the main account first. The main account is
-    always listed: it is what an old, single-account setup polls."""
+    """[{name, config_dir, org_uuid (None when not logged in), is_main}], account a first. a is always listed (it is what an old,
+    single-account setup polls): in its own folder once it has moved there, else legacy. Every other account is a folder
+    ~/.claude/account-NAME. is_main: a, the account every reader means by "the account"."""
     home = home_dir()
-    l_accounts = [{"name": "a", "config_dir": norm(home), "org_uuid": _org_uuid(Path.home() / ".claude.json"), "is_main": True}]
+    if a_moved():
+        l_accounts = [{"name": "a", "config_dir": norm(a_folder()), "org_uuid": _org_uuid(a_folder() / ".claude.json"), "is_main": True}]
+    else:
+        l_accounts = [{"name": "a", "config_dir": norm(home), "org_uuid": _org_uuid(Path.home() / ".claude.json"), "is_main": True}]
     for folder in sorted(home.glob("account-*")):
         name = folder.name[len("account-"):]
         if folder.is_dir() and NAME_RE.fullmatch(name) and name != "a":
@@ -55,11 +70,12 @@ def local_accounts() -> list[dict]:
     return l_accounts
 
 
-def service_name(config_dir: str, is_main: bool) -> str:
-    """macOS Keychain service of an account's login. The default folder: Claude Code's own name; another folder
-    (CLAUDE_CONFIG_DIR): that name + '-' + the first 8 hex of the sha256 of the folder path. Not documented by Anthropic;
-    verified on the Mac on 2026-11-19 with a real second login (doc/upstream.md §3.5)."""
-    if is_main:
+def service_name(config_dir: str, is_main: bool = False) -> str:
+    """macOS Keychain service of an account's login. Claude's default folder (~/.claude, or none): Claude Code's own name; any
+    other folder (CLAUDE_CONFIG_DIR, every account folder since 2026-11-21, a included): that name + '-' + the first 8 hex of
+    the sha256 of the folder path. Not documented by Anthropic; verified on the Mac on 2026-11-19 with a real second login
+    (doc/upstream.md §3.5). `is_main` is kept for old callers: it no longer matters."""
+    if not config_dir or norm(config_dir) == norm(home_dir()):
         return KEYCHAIN_SERVICE
     return f"{KEYCHAIN_SERVICE}-{hashlib.sha256(config_dir.encode()).hexdigest()[:8]}"
 

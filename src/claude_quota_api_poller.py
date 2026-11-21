@@ -110,7 +110,7 @@ def fetch_token(config_dir: str | None = None, is_main: bool = True) -> tuple[st
                 capture_output=True, text=True, timeout=5, check=True,
             ).stdout
         else:
-            text = (CREDENTIALS_FILE if is_main or not config_dir else claude_accounts.credentials_file(config_dir)).read_text()
+            text = claude_accounts.credentials_file(config_dir or str(claude_accounts.home_dir())).read_text()
         d_creds = json.loads(text)
         token = d_creds.get("claudeAiOauth", {}).get("accessToken")
         if not token:
