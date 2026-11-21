@@ -55,3 +55,7 @@ Every change to what agent-tracker (agent-usage-tracker until 2026-11) captures,
 ## 2026-11-20: the job of each slot
 
 `slots.job`, in the key (`ts`, `machine`, `folder`, `entrypoint`, `job`, `model`): the job-runner job that started the session, read from the resource attribute `job.name` of its telemetry; job-runner's `lib.sh` exports it since the same day (its commit 8154f1d). Why: the user wants scheduled jobs split by job name, and interactive sessions (their subagents and the `claude -p` they run included) by folder; `entrypoint` alone mixed the two (a `claude -p` run from an interactive session is `sdk-cli` too). Every slot written before has `job` `''` (unknown, never backfilled). Layout step `migrate_to_target.py slots-job` (archives first, keeps every rowid). A sender older than the column is still accepted by the gate (`job` `''`).
+
+## 2026-11-21: account a in its own folder
+
+`claude_accounts.py`: account a is `~/.claude/account-a/` once it holds a login (`a_moved()`); the Keychain item of every account folder is `Claude Code-credentials-<8 hex of sha256(folder)>`; the default item stays for older sessions. No schema change. Layout and decisions: `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
