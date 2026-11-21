@@ -20,9 +20,9 @@ for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]):
     print("\t".join("" if v is None else str(v) for v in r))' "$ADB" "$1"; }
 # req <ts> <id> <session> <folder> <entrypoint> <model> <in> <out> <cache read> <write 5m> <write 1h>: an intermediary request
 req() { py "db = usage_db.open_intermediary('claude'); db.execute('INSERT INTO requests VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', ($1, usage_db.iso($1), '$2', '$3', '$4', '$5', '$6', $7, $8, $9, ${10}, ${11}))"; }
-# tel <ts> <request id> <session> <model> <in> <out> <cache read> <cache creation> <cost or None> [job]: a telemetry
+# tel <ts> <request id> <session> <model> <in> <out> <cache read> <cache creation> <cost or None> [job] [account]: a telemetry
 # event; with a job, the resource attribute job.name job-runner gives every program a job starts
-tel() { py "db = usage_db.open_sessions('claude'); s.add_telemetry(db, {'source': 'claude_otel', 'observed_at': $1, 'received_at': $1, 'event': 'api_request', 'resource': {'service.name': 'claude-code', **({'job.name': '${10:-}'} if '${10:-}' else {})}, 'attributes': {'session.id': '$3', 'request_id': '$2', 'model': '$4', 'input_tokens': $5, 'output_tokens': $6, 'cache_read_tokens': $7, 'cache_creation_tokens': $8, **({} if '$9' == 'None' else {'cost_usd': $9})}})"; }
+tel() { py "db = usage_db.open_sessions('claude'); s.add_telemetry(db, {'source': 'claude_otel', 'observed_at': $1, 'received_at': $1, 'event': 'api_request', 'resource': {'service.name': 'claude-code', **({'job.name': '${10:-}'} if '${10:-}' else {})}, 'attributes': {'session.id': '$3', 'request_id': '$2', 'model': '$4', **({'organization.id': '${11:-}'} if '${11:-}' else {}), 'input_tokens': $5, 'output_tokens': $6, 'cache_read_tokens': $7, 'cache_creation_tokens': $8, **({} if '$9' == 'None' else {'cost_usd': $9})}})"; }
 scan() { py "db = usage_db.open_intermediary('claude'); db.execute('INSERT INTO scans VALUES (?,?,?,0)', ($1, usage_db.iso($1), $2))"; }
 # run <now>: one run, without reading transcripts
 run() { py "import time; a.transcript_reader.main = lambda: ''; time.time = lambda: $1; a.main()"; }
@@ -85,6 +85,51 @@ assert_eq "a bad row rejects its whole batch" "11" \
     "$(py "
 try: g.add_slots(usage_db.open_aggregates('claude'), [$good | dict(ts=3000, dt=usage_db.iso(3000)), $good | dict(ts=3001)])
 except ValueError: pass" ; q "SELECT COUNT(*) FROM slots")"
+
+section "the account (2026-11-21): a request's own telemetry, else its session's single account, else '' (unknown)"
+UA=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa UB=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+S4=44444444-4444-4444-4444-444444444444 S5=55555555-5555-5555-5555-555555555555 S6=66666666-6666-6666-6666-666666666666
+req 4000 q1 $S4 /c cli opus 1 1 0 0 0
+tel 4001 q1 $S4 opus 1 1 0 0 0.1 "" $UA           # its own telemetry names account A
+req 4010 q2 $S4 /c cli opus 1 1 0 0 0             # no telemetry of its own: its session has one account (A)
+req 4020 q3 $S5 /c cli opus 1 1 0 0 0
+tel 4021 q3 $S5 opus 1 1 0 0 0.1 "" $UB
+req 4030 q4 $S5 /c cli opus 1 1 0 0 0
+tel 4031 q4 $S5 opus 1 1 0 0 0.1 "" $UA           # S5 was resumed on another account: two accounts in one session
+req 4040 q5 $S5 /c cli opus 1 1 0 0 0             # no telemetry of its own, its session has two accounts: unknown
+tel 4050 t4 $S4 haiku 1 1 0 0 0.1 "" $UA          # telemetry only, account A
+req 4060 q6 $S6 /d cli opus 1 1 0 0 0             # a session telemetry never saw
+scan 4600 4500
+run 4600 >/dev/null
+assert_eq "per account: own telemetry, the session's single account, a session with two: only its own events; unknown ''" "/c	haiku	aaaa	1
+/c	opus		1
+/c	opus	aaaa	3
+/c	opus	bbbb	1
+/d	opus		1" "$(q "SELECT folder, model, substr(account, 1, 4), requests FROM slots WHERE ts = 3900 ORDER BY folder, model, account")"
+assert_eq "the account is the whole organization uuid" "$UA" "$(q "SELECT DISTINCT account FROM slots WHERE account LIKE 'aaaa%'")"
+assert_eq "two accounts, same slot, folder, entrypoint, job and model: two rows (the key holds the account)" "3" "$(q "SELECT COUNT(*) FROM slots WHERE ts = 3900 AND folder = '/c' AND model = 'opus'")"
+
+section "the gate and the account"
+OLDDB="$RT/data/claude/aggregates/m3.db"
+python3 - "$OLDDB" <<'PY'
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.executescript("""CREATE TABLE slots (ts INTEGER NOT NULL, dt TEXT NOT NULL, machine TEXT NOT NULL, folder TEXT NOT NULL,
+  entrypoint TEXT NOT NULL, job TEXT NOT NULL DEFAULT '', model TEXT NOT NULL, requests INTEGER NOT NULL, input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL, cache_read_tokens INTEGER NOT NULL, cache_write_5m_tokens INTEGER NOT NULL,
+  cache_write_1h_tokens INTEGER NOT NULL, cache_write_unknown_tokens INTEGER NOT NULL, usd REAL,
+  tokens_without_usd INTEGER NOT NULL, written_ts INTEGER NOT NULL, UNIQUE (ts, machine, folder, entrypoint, job, model));
+PRAGMA user_version = 4;""")
+db.commit()
+PY
+good3="dict(ts=600, dt=usage_db.iso(600), machine='m3', folder='', entrypoint='', job='', account='', model='x', requests=1, input_tokens=1, output_tokens=1, cache_read_tokens=0, cache_write_5m_tokens=0, cache_write_1h_tokens=0, cache_write_unknown_tokens=0, usd=None, tokens_without_usd=3, written_ts=1)"
+assert_eq "a file not migrated yet takes a row that knows no account (it fits the old key)" "1" "$(py "print(g.add_slots(usage_db.open_aggregates('claude', machine='m3'), [$good3]))")"
+assert_contains "...and refuses one that knows an account, saying to migrate (it would collide with another account's row)" "$(py "g.add_slots(usage_db.open_aggregates('claude', machine='m3'), [$good3 | dict(ts=900, dt=usage_db.iso(900), account='$UA')])" 2>&1)" "slots-account"
+assert_eq "a sender older than the column: account ''" "[]" "$(py "d = $good3 | dict(machine='m1', ts=1500, dt=usage_db.iso(1500)); del d['account']; g.add_slots(usage_db.open_aggregates('claude'), [d])"; q "SELECT '[' || account || ']' FROM slots WHERE ts = 1500 AND model = 'x'")"
+assert_eq "a valid uuid is stored" "$UA" "$(py "g.add_slots(usage_db.open_aggregates('claude'), [$good3 | dict(machine='m1', ts=1800, dt=usage_db.iso(1800), account='$UA')])"; q "SELECT account FROM slots WHERE ts = 1800 AND model = 'x'")"
+for bad in "account='nope'" "account=None" "account=3"; do
+    assert_contains "rejected: $bad" "$(py "g.add_slots(usage_db.open_aggregates('claude'), [$good3 | dict(machine='m1', ts=2100, dt=usage_db.iso(2100), $bad)])" 2>&1)" "ValueError"
+done
 
 section "end to end: transcript files -> transcript_reader -> intermediary/ -> slots, with telemetry's cost"
 E2E="$TMP/e2e"

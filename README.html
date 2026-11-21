@@ -161,7 +161,7 @@
       <tr><th>Category</th><th>What</th><th>Raw or computed</th><th>Scope</th><th>Where it lives</th><th>Copies</th></tr>
       <tr><td><span class="cat c1">1 · Quotas</span></td><td>quota readings (% of the 5h and 7d windows, reset times), failed polls</td><td>raw: lost if not stored</td><td>account-wide, real time</td><td><b>shared</b>: both machines, synced both ways every 2 min</td><td>2</td></tr>
       <tr><td><span class="cat c2">2 · Machine raw</span></td><td><code>sessions_usages.db</code> (telemetry, statusline session snapshots) and the transcripts</td><td>raw</td><td>one machine</td><td><b>never leaves its machine</b></td><td>1 (accepted)</td></tr>
-      <tr><td><span class="cat c3">3 · Aggregates</span></td><td>Category 2 added up per 5-min slot × machine × folder × entrypoint × job × model: one table, <code>slots</code></td><td>computed from Category 2</td><td>one machine</td><td>computed on each machine every 5 min; the Mac sends its rows to the VM every 5 min</td><td>2 (Mac's rows)</td></tr>
+      <tr><td><span class="cat c3">3 · Aggregates</span></td><td>Category 2 added up per 5-min slot × machine × folder × entrypoint × job × account × model: one table, <code>slots</code></td><td>computed from Category 2</td><td>one machine</td><td>computed on each machine every 5 min; the Mac sends its rows to the VM every 5 min</td><td>2 (Mac's rows)</td></tr>
       <tr><td><span class="cat c4">4 · Meta-analysis</span></td><td><b>not built here: it belongs to a reader</b> (<code>FOR_READERS.md</code>). Readers need from 1 + 3: $ or tokens per 5-hour window and week (correlating the % with $ or tokens), and past consumption by project, machine, interactive vs scheduled</td><td>computed from 1 + 3</td><td>all machines</td><td>the reader</td><td>—</td></tr>
     </table>
     <p class="note">Arrows only go 2 → 3 → 4, and 1 → 4. Category 2 never crosses machines; only Categories 1 and 3 do.</p>
@@ -471,6 +471,7 @@ poller, every minute: each account logged in here: its own token, its own freshn
       <tr><td><code>folder</code></td><td>TEXT NOT NULL</td><td>the session's working directory; <code>''</code> when unknown</td></tr>
       <tr><td><code>entrypoint</code></td><td>TEXT NOT NULL</td><td>as Claude Code wrote it: <code>cli</code> (interactive), <code>sdk-cli</code> (<code>claude -p</code>), <code>sdk-py</code> (Agent SDK), …; <code>''</code> when unknown</td></tr>
       <tr><td><code>job</code></td><td>TEXT NOT NULL</td><td>the job-runner job whose program started the session (<code>&lt;repo&gt;</code> or <code>&lt;repo&gt;.&lt;job&gt;</code>, e.g. <code>jobs.apply</code>), from the resource attribute <code>job.name</code> of the session's telemetry; <code>''</code> = no job: an interactive session, its subagents and the <code>claude -p</code> it ran, a session without telemetry, and every slot before 2026-11-20 (since 2026-11-20)</td></tr>
+      <tr><td><code>account</code></td><td>TEXT NOT NULL</td><td>The Claude account's organization uuid (<code>telemetry.account</code>, from the attribute <code>organization.id</code>): the request's own telemetry event (<code>aggregate_slots</code>), else the account of its session's telemetry when that names exactly one, else <code>''</code>. <code>''</code> = unknown: every slot written before 2026-11-21 (no row is rewritten), a request telemetry never saw, a session resumed on another account whose request has no event of its own. Before 2026-11-19 every request was account a. Names and the main account: the <code>accounts</code> table (§3.5)</td></tr>
       <tr><td><code>model</code></td><td>TEXT NOT NULL</td><td>e.g. <code>claude-opus-5-5</code></td></tr>
       <tr><td><code>requests</code></td><td>INTEGER</td><td>number of requests</td></tr>
       <tr><td><code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_tokens</code>, <code>cache_write_5m_tokens</code>, <code>cache_write_1h_tokens</code></td><td>INTEGER</td><td>sums, from the transcripts</td></tr>
@@ -479,7 +480,7 @@ poller, every minute: each account logged in here: its own token, its own freshn
       <tr><td><code>tokens_without_usd</code></td><td>INTEGER</td><td>all tokens of the requests with no telemetry: the part <code>usd</code> does not cover</td></tr>
       <tr><td><code>written_ts</code></td><td>INTEGER</td><td>when the row was written</td></tr>
     </table>
-    <p class="note">Key: UNIQUE (<code>ts</code>, <code>machine</code>, <code>folder</code>, <code>entrypoint</code>, <code>job</code>, <code>model</code>). Written once, when final; never changed. No percent, ever. Example, two real requests:</p>
+    <p class="note">Key: UNIQUE (<code>ts</code>, <code>machine</code>, <code>folder</code>, <code>entrypoint</code>, <code>job</code>, <code>account</code>, <code>model</code>). Written once, when final; never changed. No percent, ever. Example, two real requests:</p>
 <pre>ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/trading-bot · cli · claude-opus-5-5
 requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 724 · write unknown 0 · usd 0.1416 (0.0686 + 0.0730) · without usd 0</pre>
   </div>
@@ -492,7 +493,7 @@ requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 72
        placed by their event time; folder and entrypoint from the same session's transcript requests;
        their cache writes → cache_write_unknown_tokens
        job: the session's telemetry resource job.name (job-runner exports it to every program a job starts); '' = none
-3. sum per (slot, machine, folder, entrypoint, job, model) → ingest_aggregates.py → data/claude/aggregates/&lt;this machine&gt;.db
+3. sum per (slot, machine, folder, entrypoint, job, account, model) → ingest_aggregates.py → data/claude/aggregates/&lt;this machine&gt;.db
 4. Mac only: send the new slots to the VM (6.4)</pre>
     <p class="note">A request belongs to the slot of its first transcript line; a telemetry-only request, to the slot of its event. <b>Final</b> = the slot ended at or before the latest scan's <code>complete_through_ts</code>. All lines of one request are written within 292 s, and telemetry arrives within 556 s (section 12), so 15 min is enough.</p>
     <table>

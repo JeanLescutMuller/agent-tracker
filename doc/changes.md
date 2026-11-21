@@ -59,3 +59,7 @@ Every change to what agent-tracker (agent-usage-tracker until 2026-11) captures,
 ## 2026-11-21: account a in its own folder
 
 `claude_accounts.py`: account a is `~/.claude/account-a/` once it holds a login (`a_moved()`); the Keychain item of every account folder is `Claude Code-credentials-<8 hex of sha256(folder)>`; the default item stays for older sessions. No schema change. Layout and decisions: `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
+
+## 2026-11-21: the account of each slot
+
+`slots.account`, in the key (`ts`, `machine`, `folder`, `entrypoint`, `job`, `account`, `model`): the Claude account's organization uuid, from the telemetry event of the request (`telemetry.account`, since 2026-11-19), else the single account of its session's telemetry, else `''`. Every existing row gets `''` (no row is rewritten). Migration `adhoc_quotas_analysis/migrate_to_target.py slots-account` on every machine that holds slots, before the new code runs there (archives first, keeps every rowid, idempotent); a file not migrated yet refuses a row that knows an account, so no account's requests are merged into another's. The gate checks the value (`''` or a uuid); a sender older than this date gets `''`.

@@ -38,6 +38,7 @@ AGENTS = ("claude", "codex")
 # Bumped when a schema change needs a migration; 0 means "not created yet".
 # 2: account_quotas.machine and its place in `latest` (2026-10, adhoc_quotas_analysis/migrate_to_target.py cat1-machine).
 # 3: `latest` applies the reset rule (2026-10, migrate_to_target.py view-latest).
+# slots.account (2026-11-21, migrate_to_target.py slots-account): not a user_version bump: aggregates/<machine>.db files carry none.
 # 4: account_quotas.account, the `accounts` table, `latest` = the main account, `latest_by_account` (2026-11-19,
 #    migrate_to_target.py accounts-v4); telemetry.account (sessions_usages.db).
 SCHEMA_VERSION = 4
@@ -244,13 +245,14 @@ CREATE VIEW usage_5m AS
 # final, and never changes; the Mac's file is sent to the VM, into the file
 # of the same name there. Written only by ingest_aggregates.py.
 AGGREGATES_SCHEMA = """
-CREATE TABLE slots (                 -- one row per 5-min slot × machine × folder × entrypoint × job × model
+CREATE TABLE slots (                 -- one row per 5-min slot × machine × folder × entrypoint × job × account × model
     ts INTEGER NOT NULL,              -- slot start, a multiple of 300
     dt TEXT NOT NULL,
     machine TEXT NOT NULL,            -- where the requests ran
     folder TEXT NOT NULL,             -- the session's working directory (cwd); '' when unknown
     entrypoint TEXT NOT NULL,         -- cli (interactive terminal), sdk-cli (claude -p), sdk-py (Agent SDK), ...; '' when unknown
     job TEXT NOT NULL DEFAULT '',     -- the job-runner job that started the session (<repo> or <repo>.<job>); '' = none, or before 2026-11-20
+    account TEXT NOT NULL DEFAULT '', -- the Claude account's organization uuid (telemetry organization.id); '' = unknown: before 2026-11-21 or a request telemetry never saw
     model TEXT NOT NULL,
     requests INTEGER NOT NULL,
     input_tokens INTEGER NOT NULL,
@@ -262,7 +264,7 @@ CREATE TABLE slots (                 -- one row per 5-min slot × machine × fol
     usd REAL,                         -- Claude Code's own cost_usd (telemetry), summed over the requests that have one; NULL: none has
     tokens_without_usd INTEGER NOT NULL,          -- every token of the requests with no cost_usd: what usd does not cover
     written_ts INTEGER NOT NULL,
-    UNIQUE (ts, machine, folder, entrypoint, job, model)
+    UNIQUE (ts, machine, folder, entrypoint, job, account, model)
 );
 CREATE INDEX slots_machine_ts ON slots(machine, ts);
 """

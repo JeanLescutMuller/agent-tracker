@@ -116,6 +116,14 @@ Subcommands (more are added as the phases are built):
            model), every rowid kept (the Mac's send watermark counts rowids). One transaction per file: a writer
            waits. Idempotent: a file that has the column is said and skipped.
 
+  slots-account
+           (2026-11-21, every machine that holds slots, BEFORE the new code runs there; after slots-job) each
+           data/claude/aggregates/<machine>.db: a copy into data/_archive/ first, then `slots` rebuilt with the column
+           `account` (the Claude account's organization uuid; '' for every existing row: unknown before) and the key
+           (ts, machine, folder, entrypoint, job, account, model), every rowid kept (the Mac's send watermark counts
+           rowids). One transaction per file: a writer waits. Idempotent: a file that has the column is said and
+           skipped. A file without `job` is refused: run slots-job first.
+
 Usage:
   python3 adhoc_quotas_analysis/migrate_to_target.py STEP [options] [--runtime DIR]
 """
@@ -134,7 +142,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("step", choices=["backup", "pause", "cat1-shared", "sync-init", "cat1-machine", "cat1-seed-vm",
                                     "remove-trigger", "check-intermediary", "archive-central", "view-latest", "remove-legacy", "drop-old-requests",
-                                    "data-layout", "accounts-v4", "slots-job"])
+                                    "data-layout", "accounts-v4", "slots-job", "slots-account"])
 parser.add_argument("job", nargs="?", help="pause, remove-trigger: the job (e.g. claude-quota)")
 parser.add_argument("--runtime", type=Path, default=Path.home() / "opt" / "agent-usage-tracker")
 parser.add_argument("--peer", help="cat1-shared: the other machine (ssh alias)")
@@ -615,7 +623,7 @@ def slots_job() -> None:
         say("no aggregates file, nothing to do")
     schema = usage_db.AGGREGATES_SCHEMA.strip()
     import ingest_aggregates
-    l_columns = [c for c in ingest_aggregates.SLOT_COLUMNS if c != "job"]   # the columns before 2026-11-20
+    l_columns = [c for c in ingest_aggregates.SLOT_COLUMNS if c not in ("job", "account")]   # the columns before 2026-11-20
     for path in l_paths:
         db = open_rw(path)
         if "job" in [r[1] for r in db.execute("PRAGMA table_info(slots)")]:
@@ -646,9 +654,50 @@ def slots_job() -> None:
         say(f"{path.name}: slots rebuilt with job; rows, max rowid, requests {after}")
 
 
+def slots_account() -> None:
+    folder = args.runtime / "data" / "claude" / "aggregates"
+    l_paths = sorted(folder.glob("*.db")) if folder.is_dir() else []
+    if not l_paths:
+        say("no aggregates file, nothing to do")
+    schema = usage_db.AGGREGATES_SCHEMA.strip()
+    import ingest_aggregates
+    l_columns = [c for c in ingest_aggregates.SLOT_COLUMNS if c != "account"]   # the columns before 2026-11-21
+    for path in l_paths:
+        db = open_rw(path)
+        l_have = [r[1] for r in db.execute("PRAGMA table_info(slots)")]
+        if "account" in l_have:
+            say(f"{path.name}: slots.account already there")
+            continue
+        if "job" not in l_have:
+            sys.exit(f"{path.name}: slots has no job column: run slots-job first")
+        copy_path = ARCHIVE / f"data__claude__aggregates__{path.name}.pre-slots-account-{STAMP}.db"
+        copy = sqlite3.connect(copy_path)
+        db.backup(copy)
+        copy.close()
+        say(f"{path.name}: copied to {copy_path.name}")
+        before = db.execute("SELECT COUNT(*), MAX(rowid), SUM(requests) FROM slots").fetchone()
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            table_sql, index_sql = schema.split("\nCREATE INDEX")
+            db.execute(table_sql.replace("CREATE TABLE slots", "CREATE TABLE slots_new"))
+            cols = ", ".join(l_columns)
+            db.execute(f"INSERT INTO slots_new (rowid, {cols}, account) SELECT rowid, {cols}, '' FROM slots ORDER BY rowid")
+            db.execute("DROP TABLE slots")
+            db.execute("ALTER TABLE slots_new RENAME TO slots")
+            db.execute("CREATE INDEX" + index_sql)
+            after = db.execute("SELECT COUNT(*), MAX(rowid), SUM(requests) FROM slots").fetchone()
+            if after != before:
+                raise RuntimeError(f"rows, max rowid, requests {before} before, {after} after")
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        say(f"{path.name}: slots rebuilt with account; rows, max rowid, requests {after}")
+
+
 {"backup": backup, "pause": pause, "cat1-shared": cat1_shared, "sync-init": sync_init,
  "cat1-machine": cat1_machine, "cat1-seed-vm": cat1_seed_vm,
  "remove-trigger": remove_trigger, "check-intermediary": check_intermediary,
  "archive-central": archive_central, "view-latest": view_latest,
  "remove-legacy": remove_legacy, "drop-old-requests": drop_old_requests,
- "data-layout": data_layout, "accounts-v4": accounts_v4, "slots-job": slots_job}[args.step]()
+ "data-layout": data_layout, "accounts-v4": accounts_v4, "slots-job": slots_job, "slots-account": slots_account}[args.step]()

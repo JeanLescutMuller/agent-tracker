@@ -18,7 +18,7 @@ agent-usage-tracker until 2026-11 (renamed when it grew the session files, §14)
 |---|---|---|---|---|
 | **1 · Quotas** | the account's quota readings (5-hour and 7-day %, reset times); failed polls | raw: lost if not stored | both machines, the same rows, synced both ways every 2 min | 2 |
 | **2 · Machine raw** | `sessions_usages.db` (telemetry, statusline session snapshots) + Claude Code's transcripts | raw | **never leaves its machine** | 1 (accepted) |
-| **3 · Aggregates** | Category 2 added up per 5-min slot × machine × folder × entrypoint × job × model: one table, `slots` | computed from 2 | each machine computes its own every 5 min; the Mac sends its rows to the VM | 2 for the Mac's rows |
+| **3 · Aggregates** | Category 2 added up per 5-min slot × machine × folder × entrypoint × job × account × model: one table, `slots` | computed from 2 | each machine computes its own every 5 min; the Mac sends its rows to the VM | 2 for the Mac's rows |
 | **4 · Meta-analysis** | $ or tokens per window, past use by project, machine, interactive vs scheduled | computed from 1 + 3 | **not here: a reader's** (`FOR_READERS.md`) | — |
 
 Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machines.
@@ -216,6 +216,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 | `folder` | TEXT NOT NULL | the session's working directory; `''` when unknown |
 | `entrypoint` | TEXT NOT NULL | as Claude Code wrote it: `cli` (interactive), `sdk-cli` (`claude -p`), `sdk-py` (Agent SDK), …; `''` when unknown |
 | `job` | TEXT NOT NULL | the job-runner job whose program started the session (`<repo>` or `<repo>.<job>`, e.g. `jobs.apply`), from the resource attribute `job.name` of the session's telemetry; `''` = no job: an interactive session, its subagents and the `claude -p` it ran, a session without telemetry, and every slot before 2026-11-20 (since 2026-11-20) |
+| `account` | TEXT NOT NULL | The Claude account's organization uuid (`telemetry.account`, from the attribute `organization.id`): the request's own telemetry event (`aggregate_slots`), else the account of its session's telemetry when that names exactly one, else `''`. `''` = unknown: every slot written before 2026-11-21 (no row is rewritten), a request telemetry never saw, a session resumed on another account whose request has no event of its own. Before 2026-11-19 every request was account a. Names and the main account: the `accounts` table (§3.5) |
 | `model` | TEXT NOT NULL | e.g. `claude-opus-5-5` |
 | `requests` | INTEGER | number of requests |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_5m_tokens`, `cache_write_1h_tokens` | INTEGER | sums, from the transcripts |
@@ -224,7 +225,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 | `tokens_without_usd` | INTEGER | all tokens of the requests with no telemetry: the part `usd` does not cover |
 | `written_ts` | INTEGER | when the row was written |
 
-Key: UNIQUE (`ts`, `machine`, `folder`, `entrypoint`, `job`, `model`). Written once, when final; never changed. No percent, ever. Example, two real requests:
+Key: UNIQUE (`ts`, `machine`, `folder`, `entrypoint`, `job`, `account`, `model`). Written once, when final; never changed. No percent, ever. Example, two real requests:
 
 ```
 ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/trading-bot · cli · claude-opus-5-5
@@ -241,7 +242,7 @@ requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 72
        placed by their event time; folder and entrypoint from the same session's transcript requests;
        their cache writes → cache_write_unknown_tokens
        job: the session's telemetry resource job.name (job-runner exports it to every program a job starts); '' = none
-3. sum per (slot, machine, folder, entrypoint, job, model) → ingest_aggregates.py → data/claude/aggregates/<this machine>.db
+3. sum per (slot, machine, folder, entrypoint, job, account, model) → ingest_aggregates.py → data/claude/aggregates/<this machine>.db
 4. Mac only: send the new slots to the VM (§6.4)
 ```
 
