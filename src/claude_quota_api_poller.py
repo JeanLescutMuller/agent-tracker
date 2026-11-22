@@ -73,8 +73,6 @@ import usage_db
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 KEYCHAIN_SERVICE = "Claude Code-credentials"
-# Where Claude Code keeps the same credential blob on Linux (no Keychain).
-CREDENTIALS_FILE = Path.home() / ".claude" / ".credentials.json"
 
 # The central's account gate, run over ssh (a non-login shell: python3 is
 # /usr/bin/python3 on the NAS, as for push_to_central.py).
@@ -96,17 +94,18 @@ HEADERS_TO_KEEP = (
 )
 
 
-def fetch_token(config_dir: str | None = None, is_main: bool = True) -> tuple[str | None, dict | None]:
+def fetch_token(config_dir: str | None = None) -> tuple[str | None, dict | None]:
     """Claude Code itself writes the OAuth token on login: in the macOS
-    Keychain under this exact service name, or on Linux in
-    ~/.claude/.credentials.json (same JSON) - this is the only place on the
+    Keychain under the service name of the account's folder, or on Linux in
+    <folder>/.credentials.json (same JSON) - this is the only place on the
     machine reading it for quota purposes (see the module docstring).
-    Returns (token, d_error); exactly one is non-None. `config_dir`/`is_main`: the account whose login to read
-    (default: the main account); another account's login is in its own Keychain item / its folder's .credentials.json."""
+    Returns (token, d_error); exactly one is non-None. `config_dir`: the account folder whose login to read (none: the old
+    default folder, legacy account a). Every account folder has its own Keychain item (claude_accounts.service_name) and,
+    on Linux, its own <folder>/.credentials.json."""
     try:
         if sys.platform == "darwin":
             text = subprocess.run(
-                ["security", "find-generic-password", "-s", claude_accounts.service_name(config_dir or "", is_main), "-w"],
+                ["security", "find-generic-password", "-s", claude_accounts.service_name(config_dir or ""), "-w"],
                 capture_output=True, text=True, timeout=5, check=True,
             ).stdout
         else:
@@ -277,7 +276,7 @@ def poll_account(d_acct: dict, if_older_than: int, now: int, d_waits: dict) -> t
     age = newest_age(now, d_acct["org_uuid"], d_acct["is_main"])
     if age is not None and age < if_older_than:
         return "skip", f"quota fresh enough ({age} s)", None
-    token, d_error = fetch_token(d_acct["config_dir"], d_acct["is_main"])
+    token, d_error = fetch_token(d_acct["config_dir"])
     d_api = d_api_headers = None
     if token:
         d_api, d_api_headers, d_error = fetch_usage(token)

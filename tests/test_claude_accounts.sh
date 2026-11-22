@@ -48,17 +48,17 @@ echo '{"oauthAccount":{"organizationUuid":"'$UA2'"}}' > "$HOME/.claude/account-a
 assert_eq "a logged in at its folder: moved, its own uuid" "True $(py "print(c.norm('$HOME/.claude/account-a'))") $UA2" "$(py "a = c.local_accounts()[0]; print(c.a_moved(), a['config_dir'], a['org_uuid'])")"
 assert_eq "...still the main account, listed first, b after it" "a True|b False|c False" "$(py "print('|'.join(f\"{x['name']} {x['is_main']}\" for x in c.local_accounts()))")"
 assert_eq "...no account-a twice" "1" "$(py "print(sum(x['name'] == 'a' for x in c.local_accounts()))")"
-assert_match "...its Keychain item is the hashed name, like b's" "$(py "print(c.service_name('$HOME/.claude/account-a', True))")" "^Claude Code-credentials-[0-9a-f]{8}$"
-assert_eq "...the default folder keeps Claude Code's own name (legacy sessions still running)" "Claude Code-credentials" "$(py "print(c.service_name('$HOME/.claude', True))")"
+assert_match "...its Keychain item is the hashed name, like b's" "$(py "print(c.service_name('$HOME/.claude/account-a'))")" "^Claude Code-credentials-[0-9a-f]{8}$"
+assert_eq "...the default folder keeps Claude Code's own name (legacy sessions still running)" "Claude Code-credentials" "$(py "print(c.service_name('$HOME/.claude'))")"
 py "c.write_cache(c.local_accounts())"
 assert_eq "a session on a's folder" "a $UA2" "$(py "x = c.session_account({'CLAUDE_CONFIG_DIR': '$HOME/.claude/account-a'}); print(x['name'], x['org_uuid'])")"
 assert_eq "a session still on the default folder (started before the move): a, uuid unknown" "a None" "$(py "x = c.session_account({}); print(x['name'], x['org_uuid'])")"
 rm -r "$HOME/.claude/account-a"
 
 section "the Keychain service name: Claude Code's own for the main account, a folder hash for another"
-assert_eq "main" "Claude Code-credentials" "$(py "print(c.service_name('$HOME/.claude', True))")"
-assert_match "another: the first 8 hex of the folder's sha256" "$(py "print(c.service_name('$HOME/.claude/account-b', False))")" "^Claude Code-credentials-[0-9a-f]{8}$"
-assert_ne "...a different one per folder" "$(py "print(c.service_name('/x/a', False))")" "$(py "print(c.service_name('/x/b', False))")"
+assert_eq "main" "Claude Code-credentials" "$(py "print(c.service_name('$HOME/.claude'))")"
+assert_match "another: the first 8 hex of the folder's sha256" "$(py "print(c.service_name('$HOME/.claude/account-b'))")" "^Claude Code-credentials-[0-9a-f]{8}$"
+assert_ne "...a different one per folder" "$(py "print(c.service_name('/x/a'))")" "$(py "print(c.service_name('/x/b'))")"
 assert_match "Linux: the login blob of an account is in its own folder" "$(py "print(c.credentials_file('$HOME/.claude/account-b'))")" "/account-b/\\.credentials\\.json$"
 
 harness_summary

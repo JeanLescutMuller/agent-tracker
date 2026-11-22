@@ -139,7 +139,7 @@ multi() {
 import sys
 sys.path.insert(0, '$SRC_DIR')
 import claude_quota_api_poller as p
-p.fetch_token = lambda cd=None, is_main=True: ('tok-a' if is_main else 'tok-b', None)
+p.fetch_token = lambda cd=None: ('tok-b' if cd and cd.endswith('account-b') else 'tok-a', None)
 res = {'tok-a': $fa, 'tok-b': $fb}
 p.fetch_usage = lambda token: res[token]
 sys.argv = ['x'] + sys.argv[1:]

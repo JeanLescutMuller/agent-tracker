@@ -178,7 +178,7 @@ poller, every minute: for each account logged in here: its own token, its own fr
 | view `latest_by_account` | one row per account (NULL account = the main one), same reset rule; `name` NULL for an account this machine does not know |
 | `data/claude/quota_latest.<name>.json` | `quota_latest.json`'s shape + `account_name`, `account`; the main account keeps `quota_latest.json` |
 | `data/claude/accounts.json` | cache `{config folder: {name, org_uuid}}` written by the poller (`claude_accounts.py`); `tick` reads it, so it stays fast |
-| `tick` | the session's account = `CLAUDE_CONFIG_DIR` (default folder = main) looked up in the cache; **unknown account: no quota reading stored, nothing offered** (never a guess); the session's cost snapshot is still stored |
+| `tick` | the session's account = its `CLAUDE_CONFIG_DIR` (an account folder; unset = the old default folder `~/.claude`, legacy account a) looked up in the cache; **unknown account: no quota reading stored, nothing offered** (never a guess); the session's cost snapshot is still stored |
 | poller exit codes | follow the main account; another account's failure (a login unused for 8 h reads 401) is in the summary line, never a failed run; each account has its own 429 wait (`state/sync/claude_quota_wait.json`) |
 | lifecycle `start` line | `account`: `CLAUDE_ACCOUNT` (a when unset) |
 

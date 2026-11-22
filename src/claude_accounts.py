@@ -70,11 +70,11 @@ def local_accounts() -> list[dict]:
     return l_accounts
 
 
-def service_name(config_dir: str, is_main: bool = False) -> str:
+def service_name(config_dir: str) -> str:
     """macOS Keychain service of an account's login. Claude's default folder (~/.claude, or none): Claude Code's own name; any
     other folder (CLAUDE_CONFIG_DIR, every account folder since 2026-11-21, a included): that name + '-' + the first 8 hex of
     the sha256 of the folder path. Not documented by Anthropic; verified on the Mac on 2026-11-19 with a real second login
-    (doc/upstream.md §3.5). `is_main` is kept for old callers: it no longer matters."""
+    (doc/upstream.md §3.5)."""
     if not config_dir or norm(config_dir) == norm(home_dir()):
         return KEYCHAIN_SERVICE
     return f"{KEYCHAIN_SERVICE}-{hashlib.sha256(config_dir.encode()).hexdigest()[:8]}"
