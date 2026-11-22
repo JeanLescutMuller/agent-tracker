@@ -120,7 +120,7 @@ def final_slots(now: int) -> tuple[list[dict], int, int]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--send-to", metavar="HOST", help="then send the slots not sent yet to HOST (the Mac: babisnas-tailscale, the NAS)")
+    parser.add_argument("--send-to", metavar="HOST", help="then send the slots not sent yet to HOST (the Mac: babisnas, the NAS)")
     args = parser.parse_args(argv)
     transcript_reader.main()
     now = int(time.time())

@@ -46,7 +46,7 @@ Code: `src/` (deployed flat to `~/opt/agent-tracker/src/`; the gates are `ingest
 | **5-min slot** | a 5-minute interval starting at a multiple of 300 s; one `slots` row per slot × machine × folder × entrypoint × model | bin, bucket |
 | **final slot** | a slot every request of which is counted: it ended before the last transcript read's "complete through" (run time − 15 min) | closed, done |
 | **intermediary** | `data/claude/intermediary.db`: the local working tables between Category 2 and 3; never sent, deletable | cache, staging |
-| **sync** | the Mac's 2-min exchange of each machine's own readings with the central (the NAS, `babisnas-tailscale`; the VM `H-Frank-1` until 2026-11), both ways | push, replication |
+| **sync** | the Mac's 2-min exchange of each machine's own readings with the central (the NAS, `babisnas`; the VM `H-Frank-1` until 2026-11), both ways | push, replication |
 | **send** | the Mac's `aggregates` job copying its new slots to the central | push (the old job that copied every row) |
 | **gate** | the only code that writes a database (`ingest_*.py`) | writer, ingester |
 | **collector** | code that reads one upstream source and hands rows to a gate: the statusline reader, the pollers, the telemetry receiver, the transcript reader (`doc/tables.md` §2.1) | writer |

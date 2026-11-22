@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sends this machine's new Category 3 rows - the `slots` of
-data/claude/aggregates/<machine>.db - to the central, the NAS (babisnas-tailscale; the VM H-Frank-1 until 2026-11), into the file
+data/claude/aggregates/<machine>.db - to the central, the NAS (babisnas; the VM H-Frank-1 until 2026-11), into the file
 of the same name there (doc/design.md §6.4):
     ~/opt/agent-tracker/data/claude/aggregates/<machine>.db
 Run by the Mac's `aggregates` job right after it writes the slots
@@ -20,7 +20,7 @@ no-op there. So an offline run, a crash or a dropped connection just means
 the slots go on the next run. Reads only; the file is opened query_only.
 A full reset of the central's copy: delete it there, then set "claude/slots" to 0.
 
-Usage: python3 push_to_central.py [--central HOST]   (default: $AGENT_USAGE_TRACKER_CENTRAL or babisnas-tailscale, the NAS since 2026-11)
+Usage: python3 push_to_central.py [--central HOST]   (default: $AGENT_USAGE_TRACKER_CENTRAL or babisnas, the NAS since 2026-11)
 """
 import argparse
 import json
@@ -32,7 +32,7 @@ import time
 import ingest_aggregates
 import usage_db
 
-CENTRAL_DEFAULT = os.environ.get("AGENT_USAGE_TRACKER_CENTRAL") or "babisnas-tailscale"
+CENTRAL_DEFAULT = os.environ.get("AGENT_USAGE_TRACKER_CENTRAL") or "babisnas"
 WATERMARKS_FILE = usage_db.RUNTIME_DIR / "state" / "push" / "watermarks.json"
 WATERMARK_KEY = "claude/slots"
 CHUNK_ROWS = 20000

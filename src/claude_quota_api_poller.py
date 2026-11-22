@@ -25,7 +25,7 @@ machine only - 429s are counted per login token, i.e. per machine
 line). One start = at most one attempt.
 
 The MacBook also runs the 2-min sync of the quota readings with the central, the NAS
-(--sync-with=babisnas-tailscale --sync-every=110; the VM H-Frank-1 until 2026-11; the central cannot reach the Mac, so the
+(--sync-with=babisnas --sync-every=110; the VM H-Frank-1 until 2026-11; the central cannot reach the Mac, so the
 Mac does both directions, doc/design.md §3.3), before deciding: one
 ssh call runs the central's gate (ingest_account_quota.py --sync-from), which
 stores the Mac's own new readings and answers with its own. Only a
