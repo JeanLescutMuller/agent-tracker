@@ -1,5 +1,7 @@
 # agent-tracker development instructions
 
+Development home: NAS (moving: until the move, edit it on the Mac; task D3). Why (U19, the user, 2026-11-22): the NAS by default; its Mac parts are installed on the Mac from GitHub with one command.
+
 **agent-tracker v1 (2026-11-07):** this repo was agent-usage-tracker; it is now also the data layer of Claude sessions (`data/sessions/<uuid>/last_seen.json`, `lifecycle.jsonl`; commands `agent-tracker tick | hook | now | check`). The design, its contract, the deploy record and the end-to-end test are in `design/`: `design/DESIGN.md` (why), `design/IMPLEMENTATION.md` (formats, commands, safety rules, status), `design/DEPLOY.md` (what was deployed, the 2026-11-07 incident), `design/design.html` (the user's page), `design/tests/integration.sh`. Tests that start tmux run under `tests/run_with_test_tmux.sh` (every tmux call on an explicit -S socket).
 
 agent-usage-tracker until 2026-11; a data layer (`doc/design.md` §14). For *working on* this repo. Read only the file that answers your question:
