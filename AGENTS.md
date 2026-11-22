@@ -62,7 +62,7 @@ Code: `src/` (deployed flat to `~/opt/agent-tracker/src/`; the gates are `ingest
 
 `install.sh` assumes a bare machine, no migration logic. **Never use `uninstall.sh` for a layout change**: it stops the telemetry receiver (Claude Code drops what it can't deliver), removes the telemetry settings and deletes `state/` and `intermediary.db`. Retire a job with `migrate_to_target.py remove-trigger JOB`.
 
-Mac (LaunchAgents) and the NAS `BabisNAS` (systemd `--user`; the VM `H-Frank-1` until 2026-11): every scheduled step is a job-runner job, `com.jeanlescut.agent-tracker.<job>`. `install.sh` also registers the two hooks and `~/.local/bin/agent-tracker`. VM deploy: rsync this repo to `~/dev/agent-tracker` there, run `install.sh`; never edit code on the VM.
+Mac (LaunchAgents) and the NAS `BabisNAS` (systemd `--user`; the VM `H-Frank-1` until 2026-11): every scheduled step is a job-runner job, `com.jeanlescut.agent-tracker.<job>`. `install.sh` also registers the two hooks and `~/.local/bin/agent-tracker`. VM deploy (until task V3 of `~/dev/data-reorganisation`: the VM keeps only `claude-quota` and `aggregates`, which task-manager's quota guard reads there; `install.sh` skips the telemetry receiver on `H-Frank-1`, the NAS's is the only one since 2026-11-19): rsync this repo to `~/dev/agent-tracker` there, run `install.sh`; never edit code on the VM.
 
 ## Tests
 
