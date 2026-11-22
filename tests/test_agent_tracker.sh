@@ -228,7 +228,9 @@ bash -c '
 assert_eq "outside tmux: every tmux field is null" "null null null null null null null null" \
     "$(jq -r '[.tmux_session, .window_id, .window_index, .window_name, .pane_id, .pane_index, .pane, .window_layout] | map(tostring) | join(" ")' "$S/r1")"
 assert_eq "nothing changed, 30 s old: not rewritten" "$(( $(jqf .ts "$S/r1") - 30 ))" "$(jqf .ts "$S/r2")"
-assert_eq "the folder changed: rewritten at once" "/b $(jqf .ts "$S/r1")" "$(jq -r '"\(.cwd) \(.ts)"' "$S/r3")"
+# rewritten = a ts of now (>= r1's), not r2's 30 s old one; == r1's failed when the ticks crossed a second (the NAS, slower)
+assert_eq "the folder changed: rewritten at once" "/b now" \
+    "$(jq -r --argjson t0 "$(jqf .ts "$S/r1")" '"\(.cwd) \(if .ts >= $t0 then "now" else .ts end)"' "$S/r3")"
 assert_ne "unchanged but 61 s old: rewritten" "$(jqf .ts "$S/r4a")" "$(jqf .ts "$S/r4")"
 
 # ---------------------------------------------------------------- tick never fails

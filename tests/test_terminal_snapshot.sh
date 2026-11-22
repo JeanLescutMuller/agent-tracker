@@ -42,7 +42,7 @@ before="$(cat "$OUT")"; touch -t 202001010000 "$OUT"
 printf '1\t999\t1\t/dev/ttys099\t0,0,1,1\n' > "$S/iterm2"
 TH_FAKE_ITERM="$S/iterm2" snap
 assert_eq "not rewritten" "$before" "$(cat "$OUT")"
-assert_match "mtime kept" "$(stat -f %Sm -t %Y "$OUT" 2>/dev/null || date -r "$OUT" +%Y)" '^2020$'
+assert_match "mtime kept" "$(date -r "$OUT" +%Y)" '^2020$'   # date -r FILE: macOS and GNU alike (GNU stat -f is the file system's)
 
 section "a change in tmux: rewritten, the old iTerm2 rows kept"
 tmux kill-session -t snap-general

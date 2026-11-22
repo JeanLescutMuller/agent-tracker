@@ -16,7 +16,9 @@ run_script() {
     local script="$1" home="$2" err_file
     [ -x "$home/fakebin/codex" ] || make_fake_codex "$home"
     err_file="$(mktemp "${TMPDIR:-/tmp}/th-err.XXXXXX")"
-    TH_OUT="$(HOME="$home" AGENT_TRACKER_SKIP_LAUNCHD=1 AGENT_TRACKER_CODEX_BIN="${CODEX_BIN_OVERRIDE:-$home/fakebin/codex}" \
+    # AGENT_TRACKER_OS=Darwin: these sections test the macOS install (LaunchAgents) on any machine, the NAS's Linux too;
+    # the Linux section below renders the systemd units the same way.
+    TH_OUT="$(HOME="$home" AGENT_TRACKER_SKIP_LAUNCHD=1 AGENT_TRACKER_OS=Darwin AGENT_TRACKER_CODEX_BIN="${CODEX_BIN_OVERRIDE:-$home/fakebin/codex}" \
         bash "$REPO_ROOT/$script" 2>"$err_file")"
     TH_STATUS=$?
     TH_ERR="$(cat "$err_file")"
