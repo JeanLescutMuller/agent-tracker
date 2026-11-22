@@ -27,12 +27,15 @@
 #   in ~/.claude/settings.json (`agent-tracker hook start|end`), and, where
 #   Codex is, the same as a Codex plugin (src/codex-plugin/, through a local
 #   marketplace, registered by `codex plugin`, as agent-session-manager's
-#   install does).
+#   install does);
+# - tests/run_with_test_tmux.sh -> run_with_test_tmux.sh: the tmux test guard every project's tests
+#   run under (~/.claude/CLAUDE.md: "A test never reaches the user's tmux server"), deployed so that a
+#   machine without this repo (the Mac, since 2026-11-22: developed on the NAS) has it too.
 # The databases (data/<agent>/account_quotas.db, sessions_usages.db) are
 # created by the gates on first write, data/sessions/ by the first tick or hook.
 # The statusLine chain (`agent-tracker tick | display`) is my-setup's, not ours.
 # Does NOT deploy adhoc_quotas_analysis/: run-by-hand research tooling stays
-# in ~/dev/agent-tracker and runs from there (~/opt is for what a
+# in ~/dev/agent-tracker (on the NAS, the development home) and runs from there (~/opt is for what a
 # scheduler runs unattended).
 #
 # Independent of agent-statusline: either can be installed first, or alone.
@@ -206,6 +209,8 @@ for f in "$SCRIPT_DIR"/src/*.py; do
 done
 # The terminal snapshot, started in the background by `agent-tracker tick` (FOR_READERS.md §4)
 _deploy "$SCRIPT_DIR/src/terminal_snapshot.sh" "$RUNTIME/src/terminal_snapshot.sh"
+# The tmux test guard, for every project's tests (also where this repo is not cloned)
+_deploy "$SCRIPT_DIR/tests/run_with_test_tmux.sh" "$RUNTIME/run_with_test_tmux.sh"
 mkdir -p "$BIN_DIR"
 if [ "$(readlink "$BIN_DIR/agent-tracker" 2>/dev/null)" = "$RUNTIME/src/agent_tracker.py" ]; then
     ok "$BIN_DIR/agent-tracker"

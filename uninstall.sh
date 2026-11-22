@@ -108,6 +108,7 @@ if [ -d "$RUNTIME" ]; then
     for job in $JOBS; do
         rm -f "${RUNTIME:?}/$job.sh" "${RUNTIME:?}/$job.conf"
     done
+    rm -f "${RUNTIME:?}/run_with_test_tmux.sh"
     for agent in claude codex; do
         rm -f "$RUNTIME/data/$agent/intermediary.db" "$RUNTIME/data/$agent/intermediary.db-wal" "$RUNTIME/data/$agent/intermediary.db-shm"
     done
