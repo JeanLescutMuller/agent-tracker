@@ -89,14 +89,14 @@ payload="$(printf '{"session_id":"u-install","cwd":"/x","transcript_path":"%s","
 out="$(printf '%s' "$payload" | env HOME="$th_home" "$th_home/.local/bin/agent-tracker" tick)"
 assert_eq "stdout is stdin" "$payload" "$out"
 assert_eq "last_seen.json in the deployed runtime" "u-install" "$(jq -r .uuid "$RT/data/sessions/u-install/last_seen.json")"
-assert_eq "quota_latest.json in the deployed runtime" "21" "$(jq -r .five_hour.used_percentage "$RT/data/claude/quota_latest.json")"
+assert_eq "quota_latest.a.json in the deployed runtime" "21" "$(jq -r .five_hour.used_percentage "$RT/data/claude/quota_latest.a.json")"
 assert_eq "...the machine name filled in at install" "$(cd "$REPO_ROOT/src" && python3 -c 'import usage_db; print(usage_db.machine_name())')" \
-    "$(jq -r .machine "$RT/data/claude/quota_latest.json")"
+    "$(jq -r .machine "$RT/data/claude/quota_latest.a.json")"
 th_run env HOME="$th_home" "$th_home/.local/bin/agent-tracker" check
 assert_status "check: exit 1 (no statusLine chain: my-setup's)" 1 "$TH_STATUS"
 assert_contains "...says so" "$TH_OUT" "statusLine"
 assert_not_contains "...but the hooks are there" "$TH_OUT" "hook SessionStart not registered"
-rm -rf "$RT/data/sessions/u-install" "$RT/data/claude/quota_latest.json" "$RT/data/claude/account_quotas.db"* "$RT/data/claude/sessions_usages.db"*
+rm -rf "$RT/data/sessions/u-install" "$RT/data/claude/quota_latest.a.json" "$RT/data/claude/account_quotas.db"* "$RT/data/claude/sessions_usages.db"*
 
 section "the deployed reader writes into the deployed runtime's databases, and prints the reading"
 printf '{"type":"assistant","timestamp":"2026-01-01T10:00:00Z"}\n' > "$th_home/t.jsonl"

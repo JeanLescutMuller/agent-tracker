@@ -346,20 +346,23 @@ def maybe_snapshot() -> None:
 # ---------------------------------------------------------------- quota_latest.json
 
 def quota_path(agent: str, name: str | None = None) -> Path:
-    """quota_latest.json (the main account), quota_latest.<name>.json (another Claude account, 2026-11-19)."""
-    return HOME / "data" / agent / ("quota_latest.json" if name in (None, "a") else f"quota_latest.{name}.json")
+    """Claude: quota_latest.<name>.json, one file per account (2026-11-22; a machine that knows no account: a).
+    Codex has no accounts: quota_latest.json."""
+    if agent != "claude":
+        return HOME / "data" / agent / "quota_latest.json"
+    return HOME / "data" / agent / f"quota_latest.{name or 'a'}.json"
 
 
 def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week,
                 name: str | None = None, account: str | None = None) -> bool:
-    """Writes data/<agent>/quota_latest.json when this reading is fresher
+    """Writes data/<agent>/quota_latest[.<name>].json when this reading is fresher
     (larger ts) than the one there, or as old with other values; returns
     whether it did. A tie with other values is a later reading: a Claude
     session can report a new percent under the same ts (its last answer's
     time), 85 times in 2 days on 2026-11-07 (31% kept, 32% refused). Windows are
     {"used_percentage", "resets_at" (epoch s)} or None, the shape of Claude
     Code's statusline `rate_limits`. One writer at a time (flock on the
-    folder), so an older reading never replaces a newer one. `name`, `account`: another Claude account (its local
+    folder), so an older reading never replaces a newer one. `name`, `account`: the Claude account (its local
     name and organization uuid): its own file, with both added."""
     import fcntl
     path = quota_path(agent, name)
@@ -373,8 +376,8 @@ def offer_quota(agent: str, ts: int, source: str, machine_name, d_five, d_week,
             return False
         d_new = {"ts": int(ts), "dt": iso(ts), "source": source, "machine": machine_name,
                  "five_hour": d_five, "seven_day": d_week}
-        if name not in (None, "a"):
-            d_new |= {"account_name": name, "account": account}
+        if agent == "claude":
+            d_new |= {"account_name": name or "a"} | ({"account": account} if account else {})
         write_json_atomic(path, d_new)
         return True
     finally:
@@ -407,8 +410,8 @@ def offer_quota_from_db(agent: str, account: str | None = None, name: str | None
     """The quota pollers, after each run: the newest reading of
     data/<agent>/account_quotas.db (any source, any machine: the poller's
     own, or one the sync brought), unchanged - no reset rule here, readers
-    apply it (FOR_READERS.md rule 8). The main account's, or, given its
-    organization uuid and local name, another Claude account's (own file)."""
+    apply it (FOR_READERS.md rule 8). Claude: the account's, given its organization uuid and local name (its own file);
+    without them, the newest reading of any account (a machine that knows no account yet: file a)."""
     import sqlite3
     db = usage_db.open_account(agent, readonly=True)
     if db is None:
@@ -417,11 +420,8 @@ def offer_quota_from_db(agent: str, account: str | None = None, name: str | None
     l_cols = [r[1] for r in db.execute("PRAGMA table_info(account_quotas)")]
     where, l_params = "(five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL)", ()
     if "account" in l_cols:
-        if account:
-            where, l_params = where + " AND account = ?", (account,)
-        else:      # the main account: readings with no account (before 2026-11-19) or the main one's
-            where += (" AND (account IS NULL OR NOT EXISTS (SELECT 1 FROM accounts WHERE is_main = 1)"
-                      " OR account = (SELECT org_uuid FROM accounts WHERE is_main = 1))")
+        if account:      # readings with no account (before 2026-11-19, one account) belong to the account named a
+            where, l_params = where + " AND (account = ?" + (" OR account IS NULL)" if name == "a" else ")"), (account,)
     elif account:
         return False
     row = db.execute(f"SELECT * FROM account_quotas WHERE {where} ORDER BY ts DESC, rowid DESC LIMIT 1", l_params).fetchone()

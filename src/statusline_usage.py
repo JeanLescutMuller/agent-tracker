@@ -108,7 +108,7 @@ def store(d_payload: dict) -> int | None:
         "machine": machine,
     }
     if d_acct and d_acct["org_uuid"]:
-        d_account["account"] = d_acct["org_uuid"]   # since 2026-11-19; none: the main account, as before
+        d_account["account"] = d_acct["org_uuid"]   # since 2026-11-19; none: the account named a (one account, as before)
     if d_acct:
         db = usage_db.open_account("claude")
         ingest_account_quota.add_row(db, "claude", d_account, json.dumps(d_account, separators=(",", ":")))

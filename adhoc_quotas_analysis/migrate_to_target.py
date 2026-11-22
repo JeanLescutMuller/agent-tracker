@@ -105,9 +105,16 @@ Subcommands (more are added as the phases are built):
   accounts-v4
            (2026-11-19, every machine, once per deploy of the multi-account code) data/claude/account_quotas.db: a copy
            into data/_archive/ before the first change, the `account` column and its index, the `accounts` table,
-           the views `latest` (the main account only) and `latest_by_account`, user_version 4; and
+           the views `latest_by_account` and `latest`, user_version 4; and
            data/claude/sessions_usages.db: the `telemetry.account` column. Nothing is backfilled (NULL = before =
-           the main account). Idempotent.
+           the account named a). Idempotent.
+
+  accounts-v5
+           (2026-11-22, every machine, right with the deploy of the no-main-account code) data/claude/account_quotas.db:
+           a copy into data/_archive/ first, the `accounts` table rebuilt without `is_main` (it holds only this machine's
+           accounts, which the poller rewrites on its next run), the views `latest_by_account` (a reading with no
+           account belongs to the account named a) and `latest` (the account with the most room left), user_version 5.
+           And data/claude/quota_latest.json (the file of before: one file per account now) removed. Idempotent.
 
   slots-job
            (2026-11-20, every machine that holds slots: the Mac, the central) each data/claude/aggregates/<machine>.db:
@@ -142,7 +149,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser()
 parser.add_argument("step", choices=["backup", "pause", "cat1-shared", "sync-init", "cat1-machine", "cat1-seed-vm",
                                     "remove-trigger", "check-intermediary", "archive-central", "view-latest", "remove-legacy", "drop-old-requests",
-                                    "data-layout", "accounts-v4", "slots-job", "slots-account"])
+                                    "data-layout", "accounts-v4", "accounts-v5", "slots-job", "slots-account"])
 parser.add_argument("job", nargs="?", help="pause, remove-trigger: the job (e.g. claude-quota)")
 parser.add_argument("--runtime", type=Path, default=Path.home() / "opt" / "agent-usage-tracker")
 parser.add_argument("--peer", help="cat1-shared: the other machine (ssh alias)")
@@ -214,7 +221,18 @@ def backup() -> None:
 ACCOUNT_COLUMNS = ("ts, dt, source, five_hour_pct, five_hour_resets_ts, seven_day_pct, seven_day_resets_ts, "
                    "observed_by_session, written_ts, raw, row_hash")
 # The latest view as usage_db.ACCOUNT_SCHEMA creates it on a new database.
-LATEST_VIEW = usage_db.LATEST_VIEW.strip()
+# The view of the steps that run on a database from before the accounts (no `account` column yet): the freshest reading
+# with the reset rule. accounts-v4 and accounts-v5 replace it by usage_db's `latest_by_account` and `latest`.
+LATEST_VIEW = """CREATE VIEW latest AS
+    SELECT ts, dt, source, machine,
+           CASE WHEN five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE five_hour_pct END AS five_hour_pct,
+           CASE WHEN five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE five_hour_resets_ts END AS five_hour_resets_ts,
+           CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE seven_day_pct END AS seven_day_pct,
+           CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE seven_day_resets_ts END AS seven_day_resets_ts
+    FROM (SELECT * FROM account_quotas
+          WHERE (five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL)
+          ORDER BY ts DESC, rowid DESC
+          LIMIT 1)"""
 
 
 def open_rw(path: Path):
@@ -575,6 +593,37 @@ def data_layout() -> None:
         f"central/ {'still there' if central.exists() else 'gone'}")
 
 
+def accounts_v5() -> None:
+    folder = args.runtime / "data" / "claude"
+    path = folder / "account_quotas.db"
+    if path.exists():
+        db = open_rw(path)
+        l_cols = [r[1] for r in db.execute("PRAGMA table_info(accounts)")]
+        if "is_main" in l_cols:
+            copy_path = ARCHIVE / f"data__claude__account_quotas.db.pre-accounts-v5-{STAMP}.db"
+            copy = sqlite3.connect(copy_path)
+            db.backup(copy)
+            copy.close()
+            say(f"account_quotas.db: copied to {copy_path.name}")
+        db.execute("BEGIN IMMEDIATE")
+        db.execute("DROP VIEW IF EXISTS latest")
+        db.execute("DROP VIEW IF EXISTS latest_by_account")
+        if "is_main" in l_cols:
+            db.execute("DROP TABLE accounts")
+        db.execute(usage_db.ACCOUNTS_TABLE.replace("CREATE TABLE accounts", "CREATE TABLE IF NOT EXISTS accounts"))
+        db.execute(usage_db.LATEST_BY_ACCOUNT_VIEW.strip())
+        db.execute(usage_db.LATEST_VIEW.strip())
+        db.execute(f"PRAGMA user_version = {usage_db.SCHEMA_VERSION}")
+        db.execute("COMMIT")
+        say(f"account_quotas.db: v{usage_db.SCHEMA_VERSION}, accounts without is_main (the poller refills it), views rebuilt")
+    else:
+        say("account_quotas.db: absent, nothing to do")
+    old = folder / "quota_latest.json"
+    if old.exists():
+        old.unlink()
+        say("quota_latest.json removed: the readers use quota_latest.<name>.json")
+
+
 def accounts_v4() -> None:
     folder = args.runtime / "data" / "claude"
     path = folder / "account_quotas.db"
@@ -590,9 +639,10 @@ def accounts_v4() -> None:
         db.execute("BEGIN IMMEDIATE")
         db.execute("CREATE INDEX IF NOT EXISTS account_quotas_account ON account_quotas(account, ts)")
         db.execute(usage_db.ACCOUNTS_TABLE.replace("CREATE TABLE accounts", "CREATE TABLE IF NOT EXISTS accounts"))
-        for view, sql in (("latest", usage_db.LATEST_VIEW), ("latest_by_account", usage_db.LATEST_BY_ACCOUNT_VIEW)):
+        for view, sql in (("latest", None), ("latest_by_account", usage_db.LATEST_BY_ACCOUNT_VIEW), ("latest", usage_db.LATEST_VIEW)):
             db.execute(f"DROP VIEW IF EXISTS {view}")
-            db.execute(sql.strip())
+            if sql:
+                db.execute(sql.strip())
         db.execute(f"PRAGMA user_version = {usage_db.SCHEMA_VERSION}")
         db.execute("COMMIT")
         say(f"account_quotas.db: v{usage_db.SCHEMA_VERSION}; latest now reads "
@@ -700,4 +750,5 @@ def slots_account() -> None:
  "remove-trigger": remove_trigger, "check-intermediary": check_intermediary,
  "archive-central": archive_central, "view-latest": view_latest,
  "remove-legacy": remove_legacy, "drop-old-requests": drop_old_requests,
- "data-layout": data_layout, "accounts-v4": accounts_v4, "slots-job": slots_job, "slots-account": slots_account}[args.step]()
+ "data-layout": data_layout, "accounts-v4": accounts_v4, "accounts-v5": accounts_v5,
+ "slots-job": slots_job, "slots-account": slots_account}[args.step]()

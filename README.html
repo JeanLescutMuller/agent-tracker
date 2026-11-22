@@ -425,19 +425,19 @@ claude_quota_api_poller.py --sync-with=H-Frank-1
   </div>
 
   <h3 id="accounts">3.5 · Several Claude accounts <span class="badge b-planned">2026-11-19</span></h3>
-  <p>my-setup's <code>claude-account</code> runs sessions on several claude.ai accounts. Account <b>a</b> is <code>~/.claude/account-a/</code> since 2026-11-21 (before: Claude Code's default folder <code>~/.claude</code>) (the <b>main account</b>: what every reader, every scheduled job and a plain <code>claude</code> mean); account <code>b</code> is <code>~/.claude/account-b/</code> (<code>CLAUDE_CONFIG_DIR</code> and <code>CLAUDE_ACCOUNT=b</code> in its sessions). An account's id is its <b>organization uuid</b>, the same on every machine. Plan: <code>doc/plan_multi_account_2026-11-19.md</code>. The overview for the user (why, designs, how to use it, every piece across the repos): <code>/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html</code>.</p>
-  <pre>session on account b ──tick──► account_quotas (account = uuid of b) ──► latest_by_account ──► quota_latest.b.json ──► b's status line
-session on account a ──tick──► account_quotas (account = uuid of a, or NULL before 2026-11-19) ──► latest ──► quota_latest.json (unchanged)
+  <p>my-setup's <code>claude-account</code> runs sessions on several claude.ai accounts. Every account is a folder <code>~/.claude/account-NAME/</code> (<code>CLAUDE_CONFIG_DIR</code> and <code>CLAUDE_ACCOUNT=NAME</code> in its sessions); account <b>a</b> was Claude Code's default folder <code>~/.claude</code> until 2026-11-21. <b>No account is preferred</b> (2026-11-22). An account's id is its organization uuid, the same on every machine. Plan: <code>doc/plan_multi_account_2026-11-19.md</code>.</p>
+  <pre>session on account X ──tick──► account_quotas (account = uuid of X) ──► latest_by_account ──► quota_latest.X.json ──► X's status line
+                                                                  └──► latest = the account with the most room (readers that mean "the quota")
 poller, every minute: each account logged in here: its own token, its own freshness, its own 429 wait</pre>
   <table>
     <tr><th>Piece</th><th>What</th></tr>
-    <tr><td><code>account_quotas.account</code>, <code>telemetry.account</code></td><td>the organization uuid; NULL = before = the main account (never backfilled). Migration <code>migrate_to_target.py accounts-v4</code></td></tr>
-    <tr><td>table <code>accounts</code></td><td>this machine's accounts: <code>name</code>, <code>org_uuid</code>, <code>config_dir</code>, <code>is_main</code>, written by the poller through the gate</td></tr>
-    <tr><td>view <code>latest</code></td><td><b>the main account only</b>: no reader changes</td></tr>
+    <tr><td><code>account_quotas.account</code>, <code>telemetry.account</code></td><td>the organization uuid; NULL = before 2026-11-19 = the account named a (never backfilled). Migrations <code>migrate_to_target.py accounts-v4</code>, <code>accounts-v5</code></td></tr>
+    <tr><td>table <code>accounts</code></td><td>this machine's accounts: <code>name</code>, <code>org_uuid</code>, <code>config_dir</code>, written by the poller through the gate</td></tr>
+    <tr><td>view <code>latest</code></td><td><b>the reading of the account with the most room left</b> (room = 100 - max(5h %, 7d %); a reading younger than 15 min first; a tie: the first name)</td></tr>
     <tr><td>view <code>latest_by_account</code></td><td>one row per account, same reset rule</td></tr>
-    <tr><td><code>quota_latest.&lt;name&gt;.json</code>, <code>accounts.json</code></td><td>another account's file (same shape + <code>account_name</code>, <code>account</code>); the cache <code>tick</code> reads</td></tr>
+    <tr><td><code>quota_latest.&lt;name&gt;.json</code>, <code>accounts.json</code></td><td>one file per account (same shape + <code>account_name</code>, <code>account</code>); the cache <code>tick</code> reads</td></tr>
     <tr><td><code>tick</code></td><td>the session's account from <code>CLAUDE_CONFIG_DIR</code>; unknown account: no quota reading (never a guess)</td></tr>
-    <tr><td>poller exit codes</td><td>follow the main account; another account's failure is in the summary line, never a failed run</td></tr>
+    <tr><td>poller exit codes</td><td>0 when any account was read; a failing account is in the summary line, never a failed run while another is healthy</td></tr>
   </table>
 
   <h2 id="cat2">4 · Category 2 · Machine raw</h2>

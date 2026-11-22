@@ -79,7 +79,7 @@ def _number(value) -> float | None:
 
 def _account(d_row: dict) -> str | None:
     """The row's account (organization uuid): its own `account`, else, for a poller row, the response header
-    anthropic-organization-id. None = before 2026-11-19 = the main account. ValueError when not a uuid."""
+    anthropic-organization-id. None = before 2026-11-19 = the account named a. ValueError when not a uuid."""
     account = d_row.get("account")
     if account is None:
         account = ((d_row.get("api_headers") or {}).get("anthropic-organization-id"))
@@ -194,20 +194,21 @@ def add_row(db, agent: str, d_row: dict, raw: str | None = None, dedup: bool = T
 
 
 def upsert_accounts(db, l_accounts: list[dict], now: int | None = None) -> int:
-    """The `accounts` table (this machine's Claude accounts): one dict {name, org_uuid, config_dir, is_main} each.
+    """The `accounts` table (this machine's Claude accounts): one dict {name, org_uuid, config_dir} each.
     Replaces the whole table inside one transaction, so a removed account disappears. Returns the count.
-    Does nothing on a database not yet migrated to v4."""
-    if not has_column(db, "account_quotas", "account") or not [r for r in db.execute("PRAGMA table_info(accounts)")]:
+    Does nothing on a database not yet migrated to v5 (accounts-v5)."""
+    l_cols = [r[1] for r in db.execute("PRAGMA table_info(accounts)")]
+    if not has_column(db, "account_quotas", "account") or not l_cols or "is_main" in l_cols:
         return 0
     now = int(time.time()) if now is None else now
     rows = []
     for d in l_accounts:
         if not ACCOUNT_RE.fullmatch(str(d["org_uuid"])) or not re.fullmatch(r"[a-z0-9_-]+", str(d["name"])):
             raise ValueError(f"bad account: {d!r}")
-        rows.append((d["name"], d["org_uuid"], str(d["config_dir"]), 1 if d.get("is_main") else 0, now))
+        rows.append((d["name"], d["org_uuid"], str(d["config_dir"]), now))
     with db:
         db.execute("DELETE FROM accounts")
-        db.executemany("INSERT INTO accounts (name, org_uuid, config_dir, is_main, seen_ts) VALUES (?,?,?,?,?)", rows)
+        db.executemany("INSERT INTO accounts (name, org_uuid, config_dir, seen_ts) VALUES (?,?,?,?)", rows)
     return len(rows)
 
 

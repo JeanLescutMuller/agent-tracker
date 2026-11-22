@@ -39,9 +39,11 @@ AGENTS = ("claude", "codex")
 # 2: account_quotas.machine and its place in `latest` (2026-10, adhoc_quotas_analysis/migrate_to_target.py cat1-machine).
 # 3: `latest` applies the reset rule (2026-10, migrate_to_target.py view-latest).
 # slots.account (2026-11-21, migrate_to_target.py slots-account): not a user_version bump: aggregates/<machine>.db files carry none.
-# 4: account_quotas.account, the `accounts` table, `latest` = the main account, `latest_by_account` (2026-11-19,
+# 4: account_quotas.account, the `accounts` table, `latest`, `latest_by_account` (2026-11-19,
 #    migrate_to_target.py accounts-v4); telemetry.account (sessions_usages.db).
-SCHEMA_VERSION = 4
+# 5: no main account (2026-11-22, migrate_to_target.py accounts-v5): `accounts` without is_main; `latest` = the account with the
+#    most room left.
+SCHEMA_VERSION = 5
 BUSY_TIMEOUT_MS = 10_000
 
 _ACCOUNT_TABLES = """
@@ -58,7 +60,7 @@ CREATE TABLE account_quotas (
     raw TEXT NOT NULL,                -- the row in its JSONL shape, verbatim
     row_hash TEXT NOT NULL UNIQUE,
     machine TEXT,                     -- the machine that took the reading (also in raw since 2026-10-10); NULL: unknown
-    account TEXT                      -- the Claude account's organization uuid (also in raw since 2026-11-19); NULL: before = the main account
+    account TEXT                      -- the Claude account's organization uuid (also in raw since 2026-11-19); NULL: before 2026-11-19 = the account named a
 );
 CREATE INDEX account_quotas_ts ON account_quotas(ts);
 CREATE INDEX account_quotas_written ON account_quotas(written_ts);
@@ -79,37 +81,19 @@ CREATE TABLE poll_errors (
 CREATE INDEX poll_errors_source_ts ON poll_errors(source, ts);
 """
 
-# The Claude accounts of THIS machine (2026-11-19): written by the poller through the gate; read by `latest`.
+# The Claude accounts of THIS machine (2026-11-19): written by the poller through the gate; read by the views.
 ACCOUNTS_TABLE = """
 CREATE TABLE accounts (
-    name TEXT PRIMARY KEY,            -- the local name: a (= ~/.claude, the main account), b, ... (CLAUDE_ACCOUNT)
+    name TEXT PRIMARY KEY,            -- the local name: a, b, ... (CLAUDE_ACCOUNT)
     org_uuid TEXT NOT NULL,           -- its organization uuid: the account's id on every machine
     config_dir TEXT NOT NULL,
-    is_main INTEGER NOT NULL,         -- 1 for the account a: what every reader means by "the account"
     seen_ts INTEGER NOT NULL
 )"""
 
-# The account's freshest reading, whatever wrote it, on any machine, with the reset rule (doc/design.md §3.2):
+# One row per account: its freshest reading, whatever wrote it, on any machine, with the reset rule (doc/design.md §3.2):
 # a window whose reset time has passed is at 0% and its reset unknown (NULL), until a newer reading - readings stop
-# while nobody uses Claude Code. The MAIN account only (2026-11-19: every reader means account a); the other
-# accounts: `latest_by_account`. A machine with no main account registered yet (its poller has not run since the
-# deploy) reads every account, as before.
-LATEST_VIEW = """
-CREATE VIEW latest AS
-    SELECT ts, dt, source, machine,
-           CASE WHEN five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE five_hour_pct END AS five_hour_pct,
-           CASE WHEN five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE five_hour_resets_ts END AS five_hour_resets_ts,
-           CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE seven_day_pct END AS seven_day_pct,
-           CASE WHEN seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE seven_day_resets_ts END AS seven_day_resets_ts
-    FROM (SELECT * FROM account_quotas
-          WHERE (five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL)
-            AND (account IS NULL OR NOT EXISTS (SELECT 1 FROM accounts WHERE is_main = 1)
-                 OR account = (SELECT org_uuid FROM accounts WHERE is_main = 1))
-          ORDER BY ts DESC, rowid DESC
-          LIMIT 1)"""
-
-# One row per account (NULL account = the main one), same reset rule; `name` is NULL for an account this machine
-# does not know (a reading the sync brought from another machine).
+# while nobody uses Claude Code. A reading with no account (before 2026-11-19, when there was one account) belongs to the
+# account named a. `name` is NULL for an account this machine does not know (a reading the sync brought from another machine).
 LATEST_BY_ACCOUNT_VIEW = """
 CREATE VIEW latest_by_account AS
     SELECT r.acct AS account, (SELECT name FROM accounts a WHERE a.org_uuid = r.acct) AS name,
@@ -118,13 +102,25 @@ CREATE VIEW latest_by_account AS
            CASE WHEN r.five_hour_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE r.five_hour_resets_ts END AS five_hour_resets_ts,
            CASE WHEN r.seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN 0.0 ELSE r.seven_day_pct END AS seven_day_pct,
            CASE WHEN r.seven_day_resets_ts <= CAST(strftime('%s', 'now') AS INTEGER) THEN NULL ELSE r.seven_day_resets_ts END AS seven_day_resets_ts
-    FROM (SELECT *, COALESCE(account, (SELECT org_uuid FROM accounts WHERE is_main = 1)) AS acct,
-                 ROW_NUMBER() OVER (PARTITION BY COALESCE(account, (SELECT org_uuid FROM accounts WHERE is_main = 1))
+    FROM (SELECT *, COALESCE(account, (SELECT org_uuid FROM accounts WHERE name = 'a')) AS acct,
+                 ROW_NUMBER() OVER (PARTITION BY COALESCE(account, (SELECT org_uuid FROM accounts WHERE name = 'a'))
                                     ORDER BY ts DESC, rowid DESC) AS rn
           FROM account_quotas WHERE five_hour_pct IS NOT NULL OR seven_day_pct IS NOT NULL) r
     WHERE r.rn = 1"""
 
-ACCOUNT_SCHEMA = _ACCOUNT_TABLES + ACCOUNTS_TABLE + ";\n" + LATEST_VIEW + ";\n" + LATEST_BY_ACCOUNT_VIEW + ";\n"
+# The reading of the account with the most room left: room = 100 - max(5h %, 7d %), the same rule as my-setup's
+# `claude` command (files/claude_account_menu.py). A reading younger than 15 minutes comes first (an account nobody uses
+# any more must not win with an old reading that the reset rule shows at 0%); a tie goes to the first name.
+LATEST_VIEW = """
+CREATE VIEW latest AS
+    SELECT ts, dt, source, machine, five_hour_pct, five_hour_resets_ts, seven_day_pct, seven_day_resets_ts
+    FROM latest_by_account
+    ORDER BY ts >= CAST(strftime('%s', 'now') AS INTEGER) - 900 DESC,
+             100 - MAX(COALESCE(five_hour_pct, 0), COALESCE(seven_day_pct, 0)) DESC,
+             COALESCE(name, '~'), ts DESC
+    LIMIT 1"""
+
+ACCOUNT_SCHEMA = _ACCOUNT_TABLES + ACCOUNTS_TABLE + ";\n" + LATEST_BY_ACCOUNT_VIEW + ";\n" + LATEST_VIEW + ";\n"
 
 SESSIONS_SCHEMA = """
 CREATE TABLE session_snapshots (     -- the statusline's per-session cumulative cost and cache statistics

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """The Claude accounts of THIS machine (2026-11-19; my-setup's `claude-account`, doc/plan_multi_account_2026-11-19.md).
 
-  account a    the main account. Symmetrical since 2026-11-21: ~/.claude/account-a/ like b, once it holds a login (a_moved());
-               before that, legacy: Claude Code's default folder ~/.claude (its login: ~/.claude.json and the Keychain item
-               "Claude Code-credentials", on Linux ~/.claude/.credentials.json); what every reader means by "the account"
-  account NAME ~/.claude/account-NAME/ (CLAUDE_CONFIG_DIR of its sessions): its own .claude.json and login
+  account NAME ~/.claude/account-NAME/ (CLAUDE_CONFIG_DIR of its sessions): its own .claude.json and login. All accounts are alike.
+               The one named a was Claude Code's default folder ~/.claude (its login: ~/.claude.json and the Keychain item
+               "Claude Code-credentials", on Linux ~/.claude/.credentials.json) until it holds a login in ~/.claude/account-a/
+               (a_moved(), 2026-11-21); until then that folder is its place, so a deploy before the login is safe
 
 An account's id is its organization uuid (`oauthAccount.organizationUuid` of its .claude.json), the same on every
 machine. `local_accounts()` lists the accounts that are logged in; `write_cache()` keeps them in
@@ -54,19 +54,18 @@ def a_moved() -> bool:
 
 
 def local_accounts() -> list[dict]:
-    """[{name, config_dir, org_uuid (None when not logged in), is_main}], account a first. a is always listed (it is what an old,
+    """[{name, config_dir, org_uuid (None when not logged in)}], by name. a is always listed (it is what an old,
     single-account setup polls): in its own folder once it has moved there, else legacy. Every other account is a folder
-    ~/.claude/account-NAME. is_main: a, the account every reader means by "the account"."""
+    ~/.claude/account-NAME."""
     home = home_dir()
     if a_moved():
-        l_accounts = [{"name": "a", "config_dir": norm(a_folder()), "org_uuid": _org_uuid(a_folder() / ".claude.json"), "is_main": True}]
+        l_accounts = [{"name": "a", "config_dir": norm(a_folder()), "org_uuid": _org_uuid(a_folder() / ".claude.json")}]
     else:
-        l_accounts = [{"name": "a", "config_dir": norm(home), "org_uuid": _org_uuid(Path.home() / ".claude.json"), "is_main": True}]
+        l_accounts = [{"name": "a", "config_dir": norm(home), "org_uuid": _org_uuid(Path.home() / ".claude.json")}]
     for folder in sorted(home.glob("account-*")):
         name = folder.name[len("account-"):]
         if folder.is_dir() and NAME_RE.fullmatch(name) and name != "a":
-            l_accounts.append({"name": name, "config_dir": norm(folder), "org_uuid": _org_uuid(folder / ".claude.json"),
-                               "is_main": False})
+            l_accounts.append({"name": name, "config_dir": norm(folder), "org_uuid": _org_uuid(folder / ".claude.json")})
     return l_accounts
 
 
@@ -111,7 +110,7 @@ def write_cache(l_accounts: list[dict]) -> None:
 
 def session_account(env=None) -> dict | None:
     """The account of the session whose environment is `env` (default: ours): {"name", "org_uuid" (None when the cache
-    does not know it yet), "config_dir"}, or None when unknown. The default folder is the main account by definition,
+    does not know it yet), "config_dir"}, or None when unknown. The default folder is the account named a,
     so a single-account machine needs no cache; another folder must be in it: never guess (the quota of an unknown
     account is not recorded)."""
     env = os.environ if env is None else env
@@ -130,4 +129,4 @@ if __name__ == "__main__":
     if "--cache" in sys.argv[1:]:
         write_cache(l_accounts)
     for a in l_accounts:
-        print(a["name"], a["org_uuid"] or "-", a["config_dir"], "main" if a["is_main"] else "")
+        print(a["name"], a["org_uuid"] or "-", a["config_dir"])

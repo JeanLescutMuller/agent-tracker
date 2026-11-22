@@ -111,18 +111,18 @@ READING="({'five_hour': {'utilization': 42.0}, 'seven_day': {'utilization': 18}}
 NEVER="(_ for _ in ()).throw(AssertionError('must not poll'))"
 
 section "exit codes and last lines (read by claude-quota.sh)"
-assert_eq "a reading -> 0, its summary last" "0 5h 42% · 7d 18%" "$(poll "$READING")"
+assert_eq "a reading -> 0, its summary last" "0 a: 5h 42% · 7d 18%" "$(poll "$READING")"
 assert_eq "...the reading names its machine, in raw and in the column" "mac	mac" \
     "$(local_db "SELECT machine, json_extract(raw, '$.machine') FROM account_quotas ORDER BY rowid DESC LIMIT 1")"
 assert_eq "429 -> 75, retry-after last" "75 retry-after 1820" \
     "$(poll "(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 429, 'retry_after_s': 1820})")"
 assert_eq "429 without Retry-After -> retry-after 0" "75 retry-after 0" "$(poll "(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 429})")"
-assert_eq "401 -> 1" "1 failed: http HTTPError 401" "$(poll "(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 401})")"
-assert_eq "network error -> 1" "1 failed: network URLError" "$(poll "(None, None, {'stage': 'network', 'type': 'URLError'})")"
+assert_eq "401 -> 1" "1 a: failed: http HTTPError 401" "$(poll "(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 401})")"
+assert_eq "network error -> 1" "1 a: failed: network URLError" "$(poll "(None, None, {'stage': 'network', 'type': 'URLError'})")"
 
 section "--if-older-than: no poll while the newest reading is younger"
-assert_match "the reading above is seconds old: exit 10, its age" "$(poll "$NEVER" --if-older-than=110)" "^10 quota fresh enough \([0-9]+ s\)$"
-assert_eq "older than 0 s: polls" "0 5h 42% · 7d 18%" "$(poll "$READING" --if-older-than=0)"
+assert_match "the reading above is seconds old: exit 10, its age" "$(poll "$NEVER" --if-older-than=110)" "^10 a: quota fresh enough \([0-9]+ s\)$"
+assert_eq "older than 0 s: polls" "0 a: 5h 42% · 7d 18%" "$(poll "$READING" --if-older-than=0)"
 
 # ---------------------------------------------------------------- several accounts (2026-11-19)
 section "several accounts: each polled with its own token, freshness and 429 wait; another account never fails the run"
@@ -158,29 +158,30 @@ OKB="({'five_hour': {'utilization': 3.0, 'resets_at': '2099-01-01T00:00:00+00:00
 E401="(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 401})"
 E429="(None, None, {'stage': 'http', 'type': 'HTTPError', 'status': 429, 'retry_after_s': 600})"
 
-assert_eq "both read: success, the main account's summary first" "0 5h 10% · 7d 50% · b 5h 3% · 7d 20%" "$(multi "$OKA" "$OKB")"
+assert_eq "both read: success, every account in the summary" "0 a: 5h 10% · 7d 50%; b: 5h 3% · 7d 20%" "$(multi "$OKA" "$OKB")"
 assert_eq "...one reading per account, each with its organization uuid" "$UA	claude_api
 $UB	claude_api" "$(mq "SELECT account, source FROM account_quotas ORDER BY ts, rowid")"
-assert_eq "...the accounts table names them" "a	$UA	1
-b	$UB	0" "$(mq "SELECT name, org_uuid, is_main FROM accounts ORDER BY name")"
-assert_eq "...latest is the main account's, latest_by_account has both" "50.0	2" "$(mq "SELECT (SELECT seven_day_pct FROM latest), (SELECT COUNT(*) FROM latest_by_account)")"
-assert_eq "...the main account's quota file" "50" "$(jq -r '.seven_day.used_percentage' "$MA/rt/data/claude/quota_latest.json")"
+assert_eq "...the accounts table names them" "a	$UA
+b	$UB" "$(mq "SELECT name, org_uuid FROM accounts ORDER BY name")"
+assert_eq "...latest is the account with the most room (b), latest_by_account has both" "20.0	2" "$(mq "SELECT (SELECT seven_day_pct FROM latest), (SELECT COUNT(*) FROM latest_by_account)")"
+assert_eq "...a's own file, with its name and uuid" "50 a $UA" "$(jq -r '"\(.seven_day.used_percentage) \(.account_name) \(.account)"' "$MA/rt/data/claude/quota_latest.a.json")"
+assert_eq "...no file without a name" "no" "$([ -e "$MA/rt/data/claude/quota_latest.json" ] && echo yes || echo no)"
 assert_eq "...b's own file, with its name and uuid" "20 b $UB" "$(jq -r '"\(.seven_day.used_percentage) \(.account_name) \(.account)"' "$MA/rt/data/claude/quota_latest.b.json")"
 assert_eq "...the cache tick reads" "a b" "$(jq -r '.accounts | to_entries | map(.value.name) | join(" ")' "$MA/rt/data/claude/accounts.json")"
 
-assert_eq "b's 401 does not fail the run" "0 5h 10% · 7d 50% · b failed: http HTTPError 401" "$(multi "$OKA" "$E401")"
+assert_eq "b's 401 does not fail the run" "0 a: 5h 10% · 7d 50%; b: failed: http HTTPError 401" "$(multi "$OKA" "$E401")"
 assert_eq "...it is a failed attempt of b's, not a reading" "1" "$(mq "SELECT COUNT(*) FROM poll_errors WHERE raw LIKE '%\"account\": \"$UB\"%'")"
-assert_eq "a's 401 fails it" "1 failed: http HTTPError 401 · b 5h 3% · 7d 20%" "$(multi "$E401" "$OKB")"
+assert_eq "a's 401 does not fail it either (b was read)" "0 a: failed: http HTTPError 401; b: 5h 3% · 7d 20%" "$(multi "$E401" "$OKB")"
 
-assert_eq "a 429, b read: the run goes on (exit 0)" "0 retry-after 600 · b 5h 3% · 7d 20%" "$(multi "$E429" "$OKB")"
-assert_eq "...a waits (no poll of a), b is polled again" "0 429 wait" "$(multi "$OKA" "$OKB" | cut -c1-10)"
-assert_eq "...exit 0 because b was read, a's wait in the line" "0 429 wait" "$(multi "$OKA" "$OKB" | cut -c1-10)"
+assert_eq "a 429, b read: the run goes on (exit 0)" "0 a: retry-after 600; b: 5h 3% · 7d 20%" "$(multi "$E429" "$OKB")"
+assert_eq "...a waits (no poll of a), b is polled again" "0 a: 429 w" "$(multi "$OKA" "$OKB" | cut -c1-10)"
+assert_eq "...exit 0 because b was read, a's wait in the line" "0 a: 429 w" "$(multi "$OKA" "$OKB" | cut -c1-10)"
 rm -f "$MA/rt/state/sync/claude_quota_wait.json"
-assert_eq "a 429 and no other account read: 75, retry-after last" "75 retry-after 600" "$(multi "$E429" "$E401")"
+assert_eq "a 429 and no other account read (b failed): 75, retry-after last" "75 retry-after 600" "$(multi "$E429" "$E401")"
 assert_eq "...nothing kept here: the job's WAIT holds a back (a polled again at once)" "75 retry-after 600" "$(multi "$E429" "$E401")"
 rm -f "$MA/rt/state/sync/claude_quota_wait.json"
 
-assert_match "freshness per account: all fresh, exit 10" "$(multi "$OKA" "$OKB" --if-older-than=99999)" "^10 quota fresh enough"
+assert_match "freshness per account: all fresh, exit 10" "$(multi "$OKA" "$OKB" --if-older-than=99999)" "^10 a: quota fresh enough"
 python3 -c "import sqlite3; db = sqlite3.connect('$MA/rt/data/claude/account_quotas.db'); db.execute(\"UPDATE account_quotas SET ts = ts - 1000 WHERE account = '$UB'\"); db.commit()"
 assert_eq "b's reading is old, a's is young: only b polled (a skipped: exit 0 because b was read)" "0" "$(multi "$OKA" "$OKB" --if-older-than=500 | cut -d' ' -f1)"
 
@@ -202,7 +203,7 @@ db = usage_db.open_account('claude')
 g.add_row(db, 'claude', {'ts': int(time.time()), 'source': 'claude_api', 'machine': 'vm', 'api': {'five_hour': {'utilization': 50.0}}})
 g.add_row(db, 'claude', {'ts': int(time.time()) - 900, 'source': 'claude_api', 'api': {'five_hour': {'utilization': 49.0}}}, machine='vm')"
 mac_before="$(local_db "SELECT COUNT(*) FROM account_quotas")"
-assert_eq "fresh: no poll, the sync said in the last line" "10 quota fresh enough (5 s) · sync ↑$mac_before ↓2" \
+assert_eq "fresh: no poll, the sync said in the last line" "10 a: quota fresh enough (5 s) · sync ↑$mac_before ↓2" \
     "$(poll "$NEVER" --sync-with=vm --sync-every=110 --if-older-than=99999 | sed -E 's/\(-?[0-9]+ s\)/(5 s)/')"
 assert_eq "the VM got the Mac's readings, labelled mac" "$mac_before" "$(peer_db "SELECT COUNT(*) FROM account_quotas WHERE machine = 'mac'")"
 assert_eq "the Mac got the VM's two, labelled vm, the old one included" "2" "$(local_db "SELECT COUNT(*) FROM account_quotas WHERE machine = 'vm'")"
@@ -210,7 +211,7 @@ assert_eq "the same rows on both sides (row_hash)" "$(peer_db "SELECT group_conc
     "$(local_db "SELECT group_concat(row_hash) FROM (SELECT row_hash FROM account_quotas ORDER BY row_hash)")"
 assert_eq "the Mac's latest is the VM's fresher reading" "vm	50.0" "$(local_db "SELECT machine, five_hour_pct FROM latest")"
 assert_match "watermarks saved" "$(cat "$LOCAL/state/sync/claude_quotas.json")" '"sent": [0-9]+, "received": [0-9]+, "last_ok_ts": [0-9]+'
-assert_eq "not due yet (110 s): no sync" "10 quota fresh enough (5 s)" \
+assert_eq "not due yet (110 s): no sync" "10 a: quota fresh enough (5 s)" \
     "$(poll "$NEVER" --sync-with=vm --sync-every=110 --if-older-than=99999 | sed -E 's/\(-?[0-9]+ s\)/(5 s)/')"
 assert_match "due again: nothing new either way, nothing echoed back" "$(poll "$NEVER" --sync-with=vm --sync-every=0 --if-older-than=99999)" "· sync ↑0 ↓0$"
 peer_before="$(peer_db "SELECT COUNT(*) FROM account_quotas")"
@@ -221,7 +222,7 @@ assert_eq "...and then goes" "$((peer_before + 1))" "$(peer_db "SELECT COUNT(*) 
 
 section "--sync-with: the VM unreachable"
 assert_match "the run goes on, the summary says so" "$(PEER_HOME=down poll "$NEVER" --sync-with=vm --sync-every=0 --if-older-than=99999)" "^10 .* · vm not reached$"
-assert_eq "...and polls when needed" "0 5h 42% · 7d 18% · vm not reached" "$(PEER_HOME=down poll "$READING" --sync-with=vm --sync-every=0)"
+assert_eq "...and polls when needed" "0 a: 5h 42% · 7d 18% · vm not reached" "$(PEER_HOME=down poll "$READING" --sync-with=vm --sync-every=0)"
 python3 -c "
 import json, sys; p = sys.argv[1]; d = json.load(open(p)); d['last_ok_ts'] -= 1800; json.dump(d, open(p, 'w'))" "$LOCAL/state/sync/claude_quotas.json"
 assert_match "unreachable for 30 min: a failure" "$(PEER_HOME=down poll "$NEVER" --sync-with=vm --sync-every=0 --if-older-than=99999)" "^1 .* · vm not reached$"

@@ -162,24 +162,24 @@ Idle, both poll less often: the reset rule (§3.2) covers the window ends.
 
 ### 3.5 Several Claude accounts (2026-11-19)
 
-my-setup's `claude-account` lets one machine run sessions on several claude.ai accounts: account **a** is `~/.claude/account-a/` since 2026-11-21 (before: Claude Code's default folder `~/.claude`) (the **main account**, what every reader, every scheduled job and a plain `claude` mean), account `b`... is `~/.claude/account-b/` (its sessions have `CLAUDE_CONFIG_DIR` set to it and `CLAUDE_ACCOUNT=b`). An account's id is its **organization uuid** (`oauthAccount.organizationUuid` of its `.claude.json`; header `anthropic-organization-id`; telemetry attribute `organization.id`): the same on every machine. The plan: `doc/plan_multi_account_2026-11-19.md`. The overview for the user (why, designs, how to use it, every piece across the repos): `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
+my-setup's `claude-account` lets one machine run sessions on several claude.ai accounts: every account is a folder `~/.claude/account-NAME/` (`a`, `b`...; its sessions have `CLAUDE_CONFIG_DIR` set to it and `CLAUDE_ACCOUNT=NAME`); account `a` was Claude Code's default folder `~/.claude` until 2026-11-21. No account is preferred (2026-11-22). An account's id is its **organization uuid** (`oauthAccount.organizationUuid` of its `.claude.json`; header `anthropic-organization-id`; telemetry attribute `organization.id`): the same on every machine. The plan: `doc/plan_multi_account_2026-11-19.md`. The overview for the user (why, designs, how to use it, every piece across the repos): `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
 
 ```
-session on account b ──tick──► account_quotas (account = uuid of b) ──► latest_by_account ──► quota_latest.b.json ──► status line of b
-session on account a ──tick──► account_quotas (account = uuid of a, or NULL before 2026-11-19) ──► latest ──► quota_latest.json (the unchanged contract)
+session on account X ──tick──► account_quotas (account = uuid of X) ──► latest_by_account ──► quota_latest.X.json ──► status line of X
+                                                                      └──► latest = the account with the most room (readers that mean "the quota")
 poller, every minute: for each account logged in here: its own token, its own freshness, its own 429 wait
 ```
 
 | Piece | What |
 |---|---|
-| `account_quotas.account`, `telemetry.account` | the organization uuid; NULL = before 2026-11-19 = the main account (insert-only: never backfilled). Migration: `migrate_to_target.py accounts-v4` |
-| table `accounts` (this machine's, written by the poller through the gate) | `name` (a, b), `org_uuid`, `config_dir`, `is_main`, `seen_ts` |
-| view `latest` | **the main account only**: no reader changes (agent-statusline, agent-quota, tasks, auto-job-apply, the trading-bot killswitch) |
-| view `latest_by_account` | one row per account (NULL account = the main one), same reset rule; `name` NULL for an account this machine does not know |
-| `data/claude/quota_latest.<name>.json` | `quota_latest.json`'s shape + `account_name`, `account`; the main account keeps `quota_latest.json` |
+| `account_quotas.account`, `telemetry.account` | the organization uuid; NULL = before 2026-11-19 = the account named a (insert-only: never backfilled). Migrations: `migrate_to_target.py accounts-v4`, then `accounts-v5` (2026-11-22) |
+| table `accounts` (this machine's, written by the poller through the gate) | `name` (a, b), `org_uuid`, `config_dir`, `seen_ts` |
+| view `latest` | **the reading of the account with the most room left**: room = 100 - max(5h %, 7d %), a reading younger than 15 min first, a tie: the first name (the rule of my-setup's `claude`); the readers that mean "the quota" (agent-tracker's statusline reader, tasks, auto-job-apply) read it |
+| view `latest_by_account` | one row per account (NULL account = the account named a), same reset rule; `name` NULL for an account this machine does not know |
+| `data/claude/quota_latest.<name>.json` | `quota_latest.json`'s shape (Codex's file keeps that name) + `account_name`, `account`; one file per account, no unsuffixed Claude file |
 | `data/claude/accounts.json` | cache `{config folder: {name, org_uuid}}` written by the poller (`claude_accounts.py`); `tick` reads it, so it stays fast |
 | `tick` | the session's account = its `CLAUDE_CONFIG_DIR` (an account folder; unset = the old default folder `~/.claude`, legacy account a) looked up in the cache; **unknown account: no quota reading stored, nothing offered** (never a guess); the session's cost snapshot is still stored |
-| poller exit codes | follow the main account; another account's failure (a login unused for 8 h reads 401) is in the summary line, never a failed run; each account has its own 429 wait (`state/sync/claude_quota_wait.json`) |
+| poller exit codes | 0 when any account was read, else 10 (some account fresh or waiting), 75 (every attempt a 429) or 1; a failing account (a login unused for 8 h reads 401) is in the summary line, never a failed run while another account is healthy; each account has its own 429 wait (`state/sync/claude_quota_wait.json`) |
 | lifecycle `start` line | `account`: `CLAUDE_ACCOUNT` (a when unset) |
 
 Not done: the 5-min `slots` by account (a later change if wanted); choosing the account by quota ("a unless saturated, then b") belongs to `claude-account` (my-setup).

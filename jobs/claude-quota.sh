@@ -14,7 +14,7 @@
 #     (doc/upstream.md §3.5)
 #   - 401 or another error: a failure
 #   - timeout 1 min; two readings at once are harmless: no claim
-#   - after each run the poller offers the account's newest reading to data/claude/quota_latest.json
+#   - after each run the poller offers each account's newest reading to data/claude/quota_latest.<name>.json
 #   - summary: the poller's last line ("5h …% · 7d …% · sync ↑2 ↓0")
 #   - alert: red after 30 min without a success (dashboard settings on the VM, DESIGN §11)
 . ~/opt/job-runner/lib.sh                # this machine's own pending WAIT: skipped right here

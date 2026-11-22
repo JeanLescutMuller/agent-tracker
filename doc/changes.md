@@ -63,3 +63,7 @@ Every change to what agent-tracker (agent-usage-tracker until 2026-11) captures,
 ## 2026-11-21: the account of each slot
 
 `slots.account`, in the key (`ts`, `machine`, `folder`, `entrypoint`, `job`, `account`, `model`): the Claude account's organization uuid, from the telemetry event of the request (`telemetry.account`, since 2026-11-19), else the single account of its session's telemetry, else `''`. Every existing row gets `''` (no row is rewritten). Migration `adhoc_quotas_analysis/migrate_to_target.py slots-account` on every machine that holds slots, before the new code runs there (archives first, keeps every rowid, idempotent); a file not migrated yet refuses a row that knows an account, so no account's requests are merged into another's. The gate checks the value (`''` or a uuid); a sender older than this date gets `''`.
+
+## 2026-11-22: no account is preferred
+
+Schema v5 (`migrate_to_target.py accounts-v5`): `accounts` loses `is_main`; the view `latest` is the reading of the account with the most room left (it was account a's); `latest_by_account` attributes a reading with no account (before 2026-11-19) to the account named a. One `quota_latest.<name>.json` per Claude account; `quota_latest.json` is removed (Codex keeps its own). The poller's exit code is 0 when any account was read. Rows are unchanged: `latest` and the files now follow the room, not account a.

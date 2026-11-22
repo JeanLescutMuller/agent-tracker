@@ -14,10 +14,10 @@ UA="11111111-1111-4111-8111-111111111111"; UB="22222222-2222-4222-8222-222222222
 py() { python3 -c "import sys, json; sys.path.insert(0, '$SRC_DIR'); import claude_accounts as c
 $1"; }
 
-section "a machine with no login: the main account alone, no uuid"
+section "a machine with no login: the account named a alone, no uuid"
 mkdir -p "$HOME/.claude"
-assert_eq "a, unknown uuid, main" "a None True" "$(py "a = c.local_accounts(); print(len(a) == 1 and f\"{a[0]['name']} {a[0]['org_uuid']} {a[0]['is_main']}\")" | sed 's/^True$/a None True/')"
-assert_eq "the default folder is the main account without any cache" "a" "$(py "print(c.session_account({})['name'])")"
+assert_eq "a, unknown uuid" "a None" "$(py "a = c.local_accounts(); print(len(a) == 1 and f\"{a[0]['name']} {a[0]['org_uuid']}\")" | sed 's/^True$/a None/')"
+assert_eq "the default folder is the account named a without any cache" "a" "$(py "print(c.session_account({})['name'])")"
 assert_eq "another folder, not in the cache: unknown (never guessed)" "None" "$(py "print(c.session_account({'CLAUDE_CONFIG_DIR': '$HOME/.claude/account-b'}))")"
 
 section "two accounts: names, uuids, folders"
@@ -27,7 +27,6 @@ echo '{"oauthAccount":{"organizationUuid":"'$UB'"}}' > "$HOME/.claude/account-b/
 echo '{"oauthAccount":{"organizationUuid":"not-a-uuid"}}' > "$HOME/.claude/account-c/.claude.json"
 assert_eq "a, b (c: bad uuid kept as not logged in; a folder with a space is no account)" "a $UA|b $UB|c None" \
     "$(py "print('|'.join(f\"{x['name']} {x['org_uuid']}\" for x in c.local_accounts()))")"
-assert_eq "only the main one is main" "a" "$(py "print(','.join(x['name'] for x in c.local_accounts() if x['is_main']))")"
 
 section "the cache tick reads: only the logged-in accounts, rewritten only on a change"
 py "c.write_cache(c.local_accounts())"
@@ -46,7 +45,7 @@ assert_eq "...and not moved" "False" "$(py "print(c.a_moved())")"
 UA2="33333333-3333-4333-8333-333333333333"
 echo '{"oauthAccount":{"organizationUuid":"'$UA2'"}}' > "$HOME/.claude/account-a/.claude.json"
 assert_eq "a logged in at its folder: moved, its own uuid" "True $(py "print(c.norm('$HOME/.claude/account-a'))") $UA2" "$(py "a = c.local_accounts()[0]; print(c.a_moved(), a['config_dir'], a['org_uuid'])")"
-assert_eq "...still the main account, listed first, b after it" "a True|b False|c False" "$(py "print('|'.join(f\"{x['name']} {x['is_main']}\" for x in c.local_accounts()))")"
+assert_eq "...listed by name: a, b, c" "a|b|c" "$(py "print('|'.join(x['name'] for x in c.local_accounts()))")"
 assert_eq "...no account-a twice" "1" "$(py "print(sum(x['name'] == 'a' for x in c.local_accounts()))")"
 assert_match "...its Keychain item is the hashed name, like b's" "$(py "print(c.service_name('$HOME/.claude/account-a'))")" "^Claude Code-credentials-[0-9a-f]{8}$"
 assert_eq "...the default folder keeps Claude Code's own name (legacy sessions still running)" "Claude Code-credentials" "$(py "print(c.service_name('$HOME/.claude'))")"
@@ -55,7 +54,7 @@ assert_eq "a session on a's folder" "a $UA2" "$(py "x = c.session_account({'CLAU
 assert_eq "a session still on the default folder (started before the move): a, uuid unknown" "a None" "$(py "x = c.session_account({}); print(x['name'], x['org_uuid'])")"
 rm -r "$HOME/.claude/account-a"
 
-section "the Keychain service name: Claude Code's own for the main account, a folder hash for another"
+section "the Keychain service name: Claude Code's own for the default folder, a folder hash for another"
 assert_eq "main" "Claude Code-credentials" "$(py "print(c.service_name('$HOME/.claude'))")"
 assert_match "another: the first 8 hex of the folder's sha256" "$(py "print(c.service_name('$HOME/.claude/account-b'))")" "^Claude Code-credentials-[0-9a-f]{8}$"
 assert_ne "...a different one per folder" "$(py "print(c.service_name('/x/a'))")" "$(py "print(c.service_name('/x/b'))")"

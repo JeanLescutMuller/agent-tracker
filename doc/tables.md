@@ -122,7 +122,7 @@ About 89% of account rows **[verified]**. Every render that writes an account ro
 
 ### 3.3 The view `latest`, and the line the reader prints
 
-`latest` is the freshest reading **of the main account** (account a: `account` NULL or the uuid of `accounts.is_main`; since 2026-11-19 `account_quotas.account` holds the organization uuid, `latest_by_account` has one row per account, `accounts` is this machine's account list: `doc/design.md` §3.5), any source, any machine, with the reset rule applied: `doc/design.md` §3.2 (columns, rule, example). The statusline reader prints it for agent-statusline as six `\034`-separated fields, `five_pct, five_reset, week_pct, week_reset, source, observed_at`: percents rounded (the display does integer arithmetic), a passed reset empty.
+`latest` is the freshest reading **of the account with the most room left** (room = 100 - max(5h %, 7d %); a reading younger than 15 min first; a tie: the first name; since 2026-11-19 `account_quotas.account` holds the organization uuid, `latest_by_account` has one row per account, `accounts` is this machine's account list: `doc/design.md` §3.5), any source, any machine, with the reset rule applied: `doc/design.md` §3.2 (columns, rule, example). The statusline reader prints it for agent-statusline as six `\034`-separated fields, `five_pct, five_reset, week_pct, week_reset, source, observed_at`: percents rounded (the display does integer arithmetic), a passed reset empty.
 
 ---
 

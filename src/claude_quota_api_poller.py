@@ -38,12 +38,13 @@ sync is older than SYNC_STALE_S.
 
 Several accounts (2026-11-19, claude_accounts.py): every Claude account logged in on this machine is polled with its
 own token, its own freshness (`--if-older-than` is per account) and its own 429 wait (state/sync/claude_quota_wait.json).
-The exit codes follow the main account (a), what the job and its dashboard mean; another account's failure (its login
-not used for 8 h reads 401) is in the summary line, never a failed run. One start = at most one attempt per account.
+No account is preferred. The exit code: 0 when any account was read (the summary lists every account: a failing one,
+for instance a login not used for 8 h reads 401, is in the line, never a failed run while another account is healthy);
+else 10 when some account was fresh enough or waiting; else 75 when every attempt was a 429 (the smallest Retry-After);
+else 1. One start = at most one attempt per account.
 
 After every run, each account's newest reading (any source, any machine) is
-offered to its file (offer_latest): the main account's data/claude/quota_latest.json,
-the one file the statusline display reads, another's quota_latest.<name>.json.
+offered to its file (offer_latest): quota_latest.<name>.json, the files the status line reads.
 
 Exit codes: 0 a reading, its summary last ("5h 42% · 7d 18%"); 10 fresh
 enough, no poll; 75 a 429; 1 any other failure (401, network..., or a
@@ -230,19 +231,16 @@ def sync(host: str, every: int, now: int) -> tuple[str, bool]:
     return f"sync ↑{d_end.get('inserted', 0)} ↓{d_got['inserted']}", False
 
 
-def newest_age(now: int, account: str | None = None, is_main: bool = True) -> int | None:
-    """Seconds since the account's newest reading, any source, any machine. The main account: the `latest` view;
-    another account (its organization uuid): `latest_by_account`. None: no reading (or a database not yet migrated)."""
+def newest_age(now: int, account: str | None = None) -> int | None:
+    """Seconds since the account's newest reading (its organization uuid), any source, any machine: `latest_by_account`.
+    None: no reading, an unknown account, or a database not yet migrated."""
     db = usage_db.open_account("claude", readonly=True)
     if db is None:
         return None
-    try:
-        if is_main:
-            row = db.execute("SELECT ts FROM latest").fetchone()
-        elif account:
-            row = db.execute("SELECT ts FROM latest_by_account WHERE account = ?", (account,)).fetchone()
-        else:
-            row = None
+    try:       # an account with no uuid (a bare runtime that knows none): the newest reading of any account
+        row = (db.execute("SELECT ts FROM latest_by_account WHERE account = ?", (account,)) if account
+               else db.execute("SELECT MAX(ts) FROM latest_by_account WHERE ts IS NOT NULL")).fetchone()
+        row = row if row and row[0] is not None else None
     except Exception:           # a database before the v4 migration has no latest_by_account
         row = None
     return now - row[0] if row else None
@@ -273,7 +271,7 @@ def poll_account(d_acct: dict, if_older_than: int, now: int, d_waits: dict) -> t
     name = d_acct["name"]
     if d_waits.get(name, 0) > now:
         return "skip", f"429 wait {d_waits[name] - now} s", None
-    age = newest_age(now, d_acct["org_uuid"], d_acct["is_main"])
+    age = newest_age(now, d_acct["org_uuid"])
     if age is not None and age < if_older_than:
         return "skip", f"quota fresh enough ({age} s)", None
     token, d_error = fetch_token(d_acct["config_dir"])
@@ -313,7 +311,7 @@ def main(argv: list[str] | None = None) -> None:
     said, stale = sync(args.sync_with, args.sync_every, now) if args.sync_with else ("", False)
     tail = f" · {said}" if said else ""
 
-    # The accounts of this machine (2026-11-19): none readable (a bare test runtime) = the main account alone, as before.
+    # The accounts of this machine (2026-11-19): none logged in (a bare test runtime) = the first one alone, as before.
     l_accounts = claude_accounts.local_accounts()
     claude_accounts.write_cache(l_accounts)
     try:
@@ -322,52 +320,45 @@ def main(argv: list[str] | None = None) -> None:
         print(f"accounts table not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
     d_waits = read_waits()
     # An account folder not logged in yet (no organization uuid) has no token to read: left out, not a failed attempt per minute.
-    l_accounts = [a for a in l_accounts if a["is_main"] or a["org_uuid"]]
+    l_accounts = [a for a in l_accounts if a["org_uuid"]] or l_accounts[:1]
     l_results = [(a, *poll_account(a, args.if_older_than, now, d_waits)) for a in l_accounts]
-    # A 429 wait kept here: another account's always (the job's WAIT cannot hold one account only); the main
-    # account's only when another account was read in this run (the run then succeeds, so the job's own WAIT,
-    # exit 75, does not hold the main account back).
-    others_read = any(o == "ok" for _, o, _, _ in l_results[1:])
-    for a, outcome, _, retry in l_results:
-        if outcome == "429" and (not a["is_main"] or others_read):
-            d_waits[a["name"]] = now + retry
+    line = "; ".join(f"{a['name']}: {text}" + (f" {retry}" if outcome == "429" else "") for a, outcome, text, retry in l_results) + tail
+    l_outcomes = [o for _, o, _, _ in l_results]
+    if "ok" in l_outcomes:
+        code = 1 if stale else 0
+    elif "skip" in l_outcomes:
+        code = 1 if stale else 10
+    elif "429" in l_outcomes:
+        code = 75
+    else:
+        code = 1
+    # A 429 wait is kept per account, except when the whole run ends in 75: the job's own WAIT holds then.
+    if code != 75:
+        for a, outcome, _, retry in l_results:
+            if outcome == "429":
+                d_waits[a["name"]] = now + retry
     write_waits(d_waits, now)
-
-    others = "".join(f" · {a['name']} {text}" for a, outcome, text, _ in l_results[1:] if outcome != "skip")
-    # The exit follows the main account (what the job and its dashboard mean), except: it skipped and another account
-    # was read -> success. A failure of another account (a login not used for 8 h reads 401) is in the line, never a failed run.
-    _, outcome, text, retry = l_results[0]
-    if outcome == "skip" and any(o == "ok" for _, o, _, _ in l_results[1:]):
-        print(f"{text}{others}{tail}")
-        sys.exit(1 if stale else 0)
-    if outcome == "skip":
-        print(f"{text}{others}{tail}")
-        sys.exit(1 if stale else 10)
-    if outcome == "ok":
-        print(f"{text}{others}{tail}")
-        sys.exit(1 if stale else 0)
-    if outcome == "429":
-        if any(o == "ok" for _, o, _, _ in l_results[1:]):   # the other accounts go on; the main one waits in WAIT_STATE
-            print(f"{text} {retry}{others}{tail}")
-            sys.exit(1 if stale else 0)
-        print(f"{said + ' · ' if said else ''}retry-after {retry}")
-        sys.exit(75)
-    print(text + others + tail)
-    sys.exit(1)
+    if code == 75:
+        l_retry = [r for _, o, _, r in l_results if o == "429"]
+        print(f"{said + ' · ' if said else ''}retry-after {min(l_retry)}")
+    else:
+        print(line)
+    sys.exit(code)
 
 
 def offer_latest() -> None:
     """After every run, whatever its outcome (a reading, a skip, a sync that brought another machine's readings): each
-    account's newest reading to its file, if fresher than the one there: the main account's data/claude/quota_latest.json,
-    another's quota_latest.<name>.json (agent_tracker.offer_quota_from_db). Never fails the run."""
+    account's newest reading to its file, if fresher than the one there: quota_latest.<name>.json
+    (agent_tracker.offer_quota_from_db). Never fails the run."""
     try:
         import agent_tracker
-        agent_tracker.offer_quota_from_db("claude")
-        for d_acct in claude_accounts.local_accounts()[1:]:
-            if d_acct["org_uuid"]:
-                agent_tracker.offer_quota_from_db("claude", account=d_acct["org_uuid"], name=d_acct["name"])
+        l_logged = [d for d in claude_accounts.local_accounts() if d["org_uuid"]]
+        for d_acct in l_logged:
+            agent_tracker.offer_quota_from_db("claude", account=d_acct["org_uuid"], name=d_acct["name"])
+        if not l_logged:       # a machine that knows no account yet: the newest reading, file a
+            agent_tracker.offer_quota_from_db("claude", name="a")
     except Exception as exc:
-        print(f"quota_latest.json not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
+        print(f"quota_latest.<name>.json not updated ({type(exc).__name__}: {exc})", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

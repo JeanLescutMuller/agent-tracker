@@ -97,7 +97,7 @@ assert_eq "cat1-machine (VM): its own reading labelled, the shared one NULL" "15
 200	" "$(qq "$VM/data/claude/account_quotas.db" "SELECT ts, machine FROM account_quotas ORDER BY ts")"
 assert_eq "...the central copy labelled by its folder" "100	mac
 200	" "$(qq "$VM/central/mac/data/claude/account_quotas.db" "SELECT ts, machine FROM account_quotas ORDER BY ts")"
-assert_eq "...the latest view names the machine, the current schema version" "200	4" \
+assert_eq "...the latest view names the machine, the current schema version" "200	5" \
     "$(qq "$VM/data/claude/account_quotas.db" "SELECT (SELECT ts FROM latest), (SELECT user_version FROM pragma_user_version)")"
 assert_eq "...a copy taken before the first change" "2" "$(ls "$VM/data/_archive" | grep -c 'pre-machine')"
 assert_contains "cat1-seed-vm: the Mac's own reading copied, none missing" "$(step "$VM" vm cat1-seed-vm --shared "$SHARED" --from-machine mac)" "1 readings copied"
@@ -186,7 +186,7 @@ now = int(time.time())
 db.execute("INSERT INTO account_quotas (ts, dt, source, five_hour_pct, five_hour_resets_ts, seven_day_pct, seven_day_resets_ts, written_ts, raw, row_hash, machine) "
            "VALUES (?, 'x', 'claude_api', 42.0, ?, 18.0, ?, ?, '{}', 'h', 'm1')", (now - 100, now - 10, now + 999, now))
 PY
-assert_contains "the old view replaced: a passed 5h reset reads 0%, no reset" "$(python3 "$MIGRATE" view-latest --runtime "$P4")" "latest recreated, user_version 4; it now reads ('claude_api', 'm1', 0.0, None, 18.0,"
+assert_contains "the old view replaced: a passed 5h reset reads 0%, no reset" "$(python3 "$MIGRATE" view-latest --runtime "$P4")" "latest recreated, user_version 5; it now reads ('claude_api', 'm1', 0.0, None, 18.0,"
 assert_contains "re-running: unchanged" "$(python3 "$MIGRATE" view-latest --runtime "$P4")" "latest unchanged"
 
 section "phase 4: remove-legacy"
@@ -281,7 +281,7 @@ th_run python3 "$MIGRATE" accounts-v4 --runtime "$A4"
 assert_status "first run ok" 0 "$TH_STATUS"
 q4() { python3 -c 'import sqlite3, sys
 for r in sqlite3.connect(sys.argv[1]).execute(sys.argv[2]): print("\t".join("" if v is None else str(v) for v in r))' "$A4/data/claude/$1" "$2"; }
-assert_eq "user_version 4, the old reading kept, account NULL" "4	40.0	" "$(q4 account_quotas.db "SELECT (SELECT user_version FROM pragma_user_version), (SELECT seven_day_pct FROM latest), (SELECT account FROM account_quotas)")"
+assert_eq "user_version 5, the old reading kept, account NULL" "5	40.0	" "$(q4 account_quotas.db "SELECT (SELECT user_version FROM pragma_user_version), (SELECT seven_day_pct FROM latest), (SELECT account FROM account_quotas)")"
 assert_eq "latest_by_account has it (main unknown yet: NULL account)" "1" "$(q4 account_quotas.db "SELECT COUNT(*) FROM latest_by_account")"
 assert_eq "accounts table exists, empty" "0" "$(q4 account_quotas.db "SELECT COUNT(*) FROM accounts")"
 assert_eq "telemetry.account added" "account" "$(q4 sessions_usages.db "SELECT name FROM pragma_table_info('telemetry') WHERE name = 'account'")"

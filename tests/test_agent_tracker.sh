@@ -115,8 +115,8 @@ q() { python3 -c "import sqlite3; print(sqlite3.connect('$DATA/claude/$1').execu
 assert_eq "an account reading per Claude session, dated by the transcript's last answer" "2 $T_ANSWER" \
     "$(q account_quotas.db "SELECT COUNT(*) || ' ' || MAX(ts) FROM account_quotas WHERE source = 'claude_statusline'")"
 assert_eq "a session snapshot per Claude session" "2" "$(q sessions_usages.db "SELECT COUNT(DISTINCT session_id) FROM session_snapshots")"
-QL="$DATA/claude/quota_latest.json"
-assert_eq "quota_latest.json: its keys" "ts dt source machine five_hour seven_day" "$(jq -r 'keys_unsorted | join(" ")' "$QL")"
+QL="$DATA/claude/quota_latest.a.json"
+assert_eq "quota_latest.a.json: its keys (a machine that knows no account yet: the name a)" "ts dt source machine five_hour seven_day account_name" "$(jq -r 'keys_unsorted | join(" ")' "$QL")"
 assert_eq "...dated by the reading (observed_at), from the statusline, this machine" "$T_ANSWER statusline test-machine" \
     "$(jq -r '"\(.ts) \(.source) \(.machine)"' "$QL")"
 assert_eq "...the windows as Claude Code sends them" '{"used_percentage":55,"resets_at":1788091200} {"used_percentage":70,"resets_at":1788307200}' \
@@ -156,15 +156,15 @@ printf '%s\n' '{"type":"assistant","timestamp":"2026-11-07T12:00:00Z"}' > "$S/b.
 jq -c '.transcript_path = $t | .session_id = "ub1" | .rate_limits.seven_day.used_percentage = 9' --arg t "$S/b.jsonl" "$S/p1.json" > "$S/p_b.json"
 MAIN_BEFORE="$(cat "$QL")"
 CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR/account-b" at tick < "$S/p_b.json" > /dev/null
-assert_eq "a session on account b: quota_latest.json (the main account's) is untouched" "$MAIN_BEFORE" "$(cat "$QL")"
+assert_eq "a session on account b: quota_latest.a.json is untouched" "$MAIN_BEFORE" "$(cat "$QL")"
 QB="$DATA/claude/quota_latest.b.json"; ls "$DATA/claude" >&2; cat "$DATA/../errors.log" 2>/dev/null >&2
 assert_eq "...b has its own file, with its name and uuid" "9 b $UB" "$(jq -r '"\(.seven_day.used_percentage) \(.account_name) \(.account)"' "$QB")"
 printf '%s\n' '{"type":"assistant","timestamp":"2026-11-07T13:00:00Z"}' > "$S/a2.jsonl"
 jq -c '.transcript_path = $t | .session_id = "ua1"' --arg t "$S/a2.jsonl" "$S/p1.json" > "$S/p_a2.json"
 at tick < "$S/p_a2.json" > /dev/null
-assert_eq "...the readings in the database carry their account: b's, a's (default folder), and none before the cache (the main one)" "$UB $UA none" \
+assert_eq "...the readings in the database carry their account: b's, a's (default folder), and none before the cache (a, the account named so)" "$UB $UA none" \
     "$(q account_quotas.db "SELECT (SELECT account FROM account_quotas WHERE observed_by_session = 'ub1') || ' ' || (SELECT account FROM account_quotas WHERE observed_by_session = 'ua1') || ' ' || (SELECT COALESCE(account, 'none') FROM account_quotas WHERE observed_by_session = 'u9' LIMIT 1)")"
-assert_eq "...a's own file is still the main account's (no account keys)" "false" "$(jq -r 'has("account")' "$QL")"
+assert_eq "...a's own file names its account too, like b's" "a $UA" "$(jq -r '"\(.account_name) \(.account)"' "$QL")"
 jq -c '.session_id = "ux" | .transcript_path = $t' --arg t "$S/b.jsonl" "$S/p1.json" > "$S/p_x.json"
 BEFORE_ROWS="$(q account_quotas.db "SELECT COUNT(*) FROM account_quotas")"
 CLAUDE_CONFIG_DIR="$S/home/.claude/account-zz" at tick < "$S/p_x.json" > /dev/null
@@ -177,7 +177,7 @@ assert_eq "the SessionStart line names the account (CLAUDE_ACCOUNT; a when unset
 import sys; sys.path.insert(0, '$REPO_ROOT/src'); import agent_tracker as a
 print(a.os.environ.get('CLAUDE_ACCOUNT') or 'a')")"
 
-section "the quota pollers offer the database's newest reading to quota_latest.json"
+section "the quota pollers offer the database's newest reading to quota_latest.<name>.json"
 python3 - "$REPO_ROOT/src" <<'PY'
 import sys, json, time
 sys.path.insert(0, sys.argv[1])
