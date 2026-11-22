@@ -48,8 +48,15 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/utils.sh"
 
-command -v python3 >/dev/null 2>&1 || { echo "python3 not found on PATH"; exit 1; }
-PYTHON3="$(command -v python3)"
+# uv's Python 3.14, ~/.local/bin/python3 (skill python-deployment), whatever PATH this runs with: a PATH with
+# python.org's 3.12 first once put it in the Mac's otel LaunchAgent (task D6, 2026-11-22). The PATH's python3 only
+# when there is none (a test's sandbox HOME).
+if [ -x "$HOME/.local/bin/python3" ]; then
+    PYTHON3="$HOME/.local/bin/python3"
+else
+    command -v python3 >/dev/null 2>&1 || { echo "python3 not found on PATH"; exit 1; }
+    PYTHON3="$(command -v python3)"
+fi
 # This machine's name, by usage_db.machine_name() (skill machine-name): written into the
 # statusline's entry point, so a render needs no scutil call.
 MACHINE="$("$PYTHON3" -c "import sys; sys.path.insert(0, '$SCRIPT_DIR/src'); import usage_db; print(usage_db.machine_name())")" \
