@@ -48,7 +48,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/utils.sh"
 
-# uv's Python 3.14, ~/.local/bin/python3 (skill python-deployment), whatever PATH this runs with: a PATH with
+# uv's Python 3.14, ~/.local/bin/python3 (skill runtime-environments), whatever PATH this runs with: a PATH with
 # python.org's 3.12 first once put it in the Mac's otel LaunchAgent (task D6, 2026-11-22). The PATH's python3 only
 # when there is none (a test's sandbox HOME).
 if [ -x "$HOME/.local/bin/python3" ]; then
