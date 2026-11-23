@@ -198,7 +198,7 @@ Claude Code runs one `statusLine` command; the key is owned by my-setup (`module
 | # | Step | Touches | Done when |
 |---|---|---|---|
 | 1 | this design, reviewed | — | the user says yes |
-| 1b | rename agent-usage-tracker → agent-tracker (GitHub repo, `~/dev`, `~/opt`, launchd labels, the VM, every reader's path); move these design files into it; this temporary `~/dev/agent-tracker` folder goes, with the user's OK | agent-usage-tracker, agent-statusline, readers | everything works under the new name; `check` is green |
+| 1b | rename agent-usage-tracker → agent-tracker (GitHub repo, `~/dev`, `~/opt`, launchd labels, the VM, every reader's path); move these design files into it; this temporary `~/dev/agents/agent-tracker` folder goes, with the user's OK | agent-usage-tracker, agent-statusline, readers | everything works under the new name; `check` is green |
 | 2 | `tick` + `hook start|end` + my-setup's chain, beside today's streams; nothing removed | agent-tracker, my-setup | a `data/sessions/<uuid>/` folder with both files for every Claude session, for 2 days |
 | 3 | `now` and `check` (agent-tracker); `ares tmux` (agent-resume); then remove `terminal_snapshot.py` and resurrect + continuum | agent-tracker, agent-resume, my-setup | a killed test tmux gets its windows, pane sizes and Claude sessions back |
 | 4 | asm → agent-resume (`ares`): index refreshed at search time; `asm close` → agent-auto-close; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job | agent-resume (was asm) | `ares resume --state pending` gives the same list, with no lag |

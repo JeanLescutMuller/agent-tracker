@@ -116,7 +116,7 @@ footer{color:var(--muted);font-size:13px}
 <header style="display:grid;gap:10px">
   <div class="eyebrow">agent-tracker · design · 2026-11-07 · proposal, nothing built</div>
   <h1>Who writes what about your Claude sessions, and who reads it</h1>
-  <p class="lede">Diagram 1 is your MacBook <b>today</b>, measured on 2026-11-07 (11:31 login → 12:48). Diagram 2 is the <b>new design</b>: two small files per Claude session (<code>last_seen.json</code>, <code>lifecycle.jsonl</code>), and everything else <b>computed when someone asks</b> (option 3, chosen 2026-11-07). <b>Use cases</b>, right after diagram 2, say who asks, how it is triggered and how often (measured). In both, each row is one writing stream: <b>who writes</b> (project · stream · trigger) → <b>what exactly is written</b> (file + example) → <b>who reads it, when, and which fields</b>. Text version for agents: <code>/Users/jeanlescut/dev/agent-tracker/DESIGN.md</code>.</p>
+  <p class="lede">Diagram 1 is your MacBook <b>today</b>, measured on 2026-11-07 (11:31 login → 12:48). Diagram 2 is the <b>new design</b>: two small files per Claude session (<code>last_seen.json</code>, <code>lifecycle.jsonl</code>), and everything else <b>computed when someone asks</b> (option 3, chosen 2026-11-07). <b>Use cases</b>, right after diagram 2, say who asks, how it is triggered and how often (measured). In both, each row is one writing stream: <b>who writes</b> (project · stream · trigger) → <b>what exactly is written</b> (file + example) → <b>who reads it, when, and which fields</b>. Text version for agents: <code>/Users/jeanlescut/dev/agents/agent-tracker/DESIGN.md</code>.</p>
   <div class="legend">
     <span class="sw p-asm"><i></i>asm → agent-resume</span><span class="sw p-cc"><i></i>Claude Code itself</span><span class="sw p-ntf"><i></i>agent-notify</span><span class="sw p-stl"><i></i>agent-statusline</span><span class="sw p-use"><i></i>agent-usage-tracker → agent-tracker</span><span class="sw p-mys"><i></i>my-setup</span><span class="sw p-trk"><i></i>agent-tracker</span><span class="sw p-aac"><i></i>agent-auto-close (new)</span>
   </div>
@@ -633,7 +633,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
     <thead><tr><th>#</th><th>Step</th><th>Touches</th><th>Done when</th></tr></thead>
     <tbody>
       <tr><td class="n">1</td><td>this design, reviewed by you</td><td>—</td><td>you say yes</td></tr>
-      <tr><td class="n">1b</td><td>rename agent-usage-tracker → agent-tracker (GitHub repo, <code>~/dev</code>, <code>~/opt</code>, launchd labels, the VM, every reader's path); move these design files into it; this temporary <code>~/dev/agent-tracker</code> folder goes, with your OK</td><td>agent-usage-tracker, agent-statusline, readers</td><td>everything works under the new name; <code>check</code> is green</td></tr>
+      <tr><td class="n">1b</td><td>rename agent-usage-tracker → agent-tracker (GitHub repo, <code>~/dev</code>, <code>~/opt</code>, launchd labels, the VM, every reader's path); move these design files into it; this temporary <code>~/dev/agents/agent-tracker</code> folder goes, with your OK</td><td>agent-usage-tracker, agent-statusline, readers</td><td>everything works under the new name; <code>check</code> is green</td></tr>
       <tr><td class="n">2</td><td><code>tick</code> (session files + the payload reader moved in, + <code>quota_latest.json</code>) + <code>hook start|end</code> + my-setup's chain; the statusline display reads <code>quota_latest.json</code>; nothing else removed</td><td>agent-tracker, agent-statusline, my-setup</td><td>a folder per Claude session, for 2 days</td></tr>
       <tr><td class="n">3</td><td><code>now</code> and <code>check</code> (agent-tracker); <code>ares tmux</code> (agent-resume); then remove terminal_snapshot.py and resurrect + continuum</td><td>agent-tracker, agent-resume, my-setup</td><td>a killed test tmux gets its windows, pane sizes and Claude sessions back</td></tr>
       <tr><td class="n">4</td><td>asm → agent-resume (<code>ares</code>): index refreshed at search time; its lifecycle hooks removed (now agent-tracker's); maybe its 1800 s job; <code>asm close</code> → agent-auto-close</td><td>agent-resume, agent-auto-close</td><td><code>ares resume --state pending</code> gives the same list, with no lag</td></tr>
@@ -652,7 +652,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
   </div>
 </section>
 
-<footer>Measured on chan-lescut-macbook-pro, 2026-11-07, 11:31–12:48 CET (one boot). Sources: <code>/Users/jeanlescut/dev/agent-tracker/DESIGN.md</code>, <code>AGENTS.md</code>.</footer>
+<footer>Measured on chan-lescut-macbook-pro, 2026-11-07, 11:31–12:48 CET (one boot). Sources: <code>/Users/jeanlescut/dev/agents/agent-tracker/DESIGN.md</code>, <code>AGENTS.md</code>.</footer>
 </div>
 </body>
 </html>

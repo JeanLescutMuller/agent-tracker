@@ -4,7 +4,7 @@
 # reboot, restore with `ares tmux`, check the restore. Never touches the real HOME, launchd or tmux server.
 #
 # Usage: bash integration.sh [<sandbox dir>]
-# Reads:  the worktrees in $W (branch agent-tracker-v1), /Users/jeanlescut/dev/claude-close-keep-screen,
+# Reads:  the worktrees in $W (branch agent-tracker-v1), /Users/jeanlescut/dev/agents/claude-close-keep-screen,
 #         fixtures/statusline_payload.claude.json
 # Writes: only under the sandbox dir; prints PASS/FAIL lines and a summary; logs in <sandbox>/log/
 set -uo pipefail
@@ -14,7 +14,7 @@ W="${W:-/Users/jeanlescut/dev}"     # the repos, by their names since 2026-11-07
 # Every tmux call (this script's and the tested code's) must go to a throwaway server on an explicit socket:
 # re-run under tests/run_with_test_tmux.sh (the user's rule after a test killed their tmux server, 2026-11-07 15:30).
 [ -n "${TEST_TMUX_SOCKET:-}" ] || exec bash "$HERE/../../tests/run_with_test_tmux.sh" bash "$0" "$@"
-AAC="${AAC:-/Users/jeanlescut/dev/claude-close-keep-screen}"
+AAC="${AAC:-/Users/jeanlescut/dev/agents/claude-close-keep-screen}"
 S="${1:-$(mktemp -d)}"
 REAL_HOME=$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')
 mkdir -p "$S/home/.claude" "$S/log" "$S/out" "$S/bin" "$S/proj/alpha" "$S/proj/beta"

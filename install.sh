@@ -35,7 +35,7 @@
 # created by the gates on first write, data/sessions/ by the first tick or hook.
 # The statusLine chain (`agent-tracker tick | display`) is my-setup's, not ours.
 # Does NOT deploy adhoc_quotas_analysis/: run-by-hand research tooling stays
-# in ~/dev/agent-tracker (on the NAS, the development home) and runs from there (~/opt is for what a
+# in ~/dev/agents/agent-tracker (on the NAS, the development home) and runs from there (~/opt is for what a
 # scheduler runs unattended).
 #
 # Independent of agent-statusline: either can be installed first, or alone.

@@ -16,7 +16,7 @@ Everything is built and tested on branch `agent-tracker-v1` in each repo (agent-
 for r in agent-usage-tracker agent-session-manager agent-notify agent-statusline my-setup; do
   git -C /Users/jeanlescut/dev/$r log --oneline main..agent-tracker-v1; done
 git -C /Users/jeanlescut/dev/agent-auto-close log --oneline
-bash /Users/jeanlescut/dev/agent-tracker/tests/integration.sh      # 38 checks, sandbox only
+bash /Users/jeanlescut/dev/agents/agent-tracker/tests/integration.sh      # 38 checks, sandbox only
 ```
 
 All five branches merge into `main` without conflict (checked with `git merge-tree`, 2026-11-07; my-setup's `main` had 2 newer commits).
@@ -29,13 +29,13 @@ All five branches merge into `main` without conflict (checked with `git merge-tr
 | 2 | rename agent-usage-tracker → **agent-tracker** (GitHub, `~/dev` folder), then deploy: **VM first, then the Mac within 30 min** | agent-usage-tracker · `doc/deploy_migration.md` | the data moves to `~/opt/agent-tracker`; the old statusline reader is bridged until step 4 |
 | 3 | rename agent-session-manager → **agent-resume**, deploy: VM (hub), then Mac | agent-session-manager · `doc/deploy_migration.md` | needs agent-tracker's lifecycle files; `asm` stays as an alias |
 | 4 | agent-statusline `install.sh` (display reads `quota_latest.json`, no heartbeat) | agent-statusline | needs step 2's `quota_latest.json` |
-| 5 | `INSTALL=true bash /Users/jeanlescut/dev/my-setup/bootstrap.sh` (statusLine chain, retires cc-map / cc-rc) | my-setup · `doc/deploy_agent_tracker_v1.md` | the chain is written only if agent-tracker is installed |
+| 5 | `INSTALL=true bash /Users/jeanlescut/dev/infra/my-setup/bootstrap.sh` (statusLine chain, retires cc-map / cc-rc) | my-setup · `doc/deploy_agent_tracker_v1.md` | the chain is written only if agent-tracker is installed |
 | 6 | agent-notify `install.sh` (5.15) | agent-notify | no migration; hooks unchanged |
 | 7 | agent-auto-close `install.sh` | agent-auto-close | no scheduler yet |
 | 8 | Codex: start one `codex` session, approve agent-tracker's and agent-resume's hooks once | — | Codex asks once per plugin |
 | 9 | `agent-tracker check`; Claude sessions started before step 2 have no start line until restarted | agent-tracker | |
 | 10 | by-hand removals, each after a look (rows marked "by hand" in each note): `~/opt/agent-usage-tracker/` leftovers, `~/opt/agent-session-manager/data/`, cc-rc's log, `~/opt/my-setup/tmux/plugins/`, resurrect snapshots, `~/.tmux/plugins/`, terminal-snapshot's old output, the heartbeat folder | all three notes | nothing reads them any more |
-| 11 | other repos, not touched by this build: my-setup's skill config-ownership (hook groups of agent-tracker and agent-resume), auto-job-apply's database path, job-runner's example copies, mentions in tasks / my-context, the Todoist `Repo:` labels | — | outside the five repos |
+| 11 | other repos, not touched by this build: my-setup's skill config-ownership (hook groups of agent-tracker and agent-resume), auto-job-apply's database path, job-runner's example copies, mentions in tasks / about-me, the Todoist `Repo:` labels | — | outside the five repos |
 
 ## Known gaps (not bugs of the build; decisions or open points)
 

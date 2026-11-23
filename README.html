@@ -302,7 +302,7 @@
     <p class="note">Only the gates write a database: <code>ingest_account_quota.py</code>, <code>ingest_session_usage.py</code>, <code>ingest_aggregates.py</code>. Paths under <code>~/opt/agent-tracker/</code> on each machine. Beside the databases: <code>data/sessions/&lt;uuid&gt;/</code> (where each Claude session runs, its lifecycle), <code>data/snapshots/&lt;boot_ts&gt;.tsv</code> (the terminal snapshot: tmux and iTerm2, for <code>ares tmux</code>) and <code>data/&lt;agent&gt;/quota_latest.json</code> (section 14).</p>
   </div>
   <div class="card">
-<pre>~/dev/agent-tracker/          the repo (development: Mac only)
+<pre>~/dev/agents/agent-tracker/          the repo (development: Mac only)
 ├── README.html                     this page, the only README
 ├── AGENTS.md                       rules, the vocabulary, which file answers what
 ├── FOR_READERS.md                  how other projects read the data
@@ -481,7 +481,7 @@ poller, every minute: each account logged in here: its own token, its own freshn
       <tr><td><code>written_ts</code></td><td>INTEGER</td><td>when the row was written</td></tr>
     </table>
     <p class="note">Key: UNIQUE (<code>ts</code>, <code>machine</code>, <code>folder</code>, <code>entrypoint</code>, <code>job</code>, <code>account</code>, <code>model</code>). Written once, when final; never changed. No percent, ever. Example, two real requests:</p>
-<pre>ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/trading-bot · cli · claude-opus-5-5
+<pre>ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/professional/trading-bot · cli · claude-opus-5-5
 requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 724 · write unknown 0 · usd 0.1416 (0.0686 + 0.0730) · without usd 0</pre>
   </div>
   <h3 id="build">6.2 · How a slot is built (job <code>aggregates</code>, every 5 min)</h3>
@@ -653,7 +653,7 @@ requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 72
   <div class="card">
 <pre>bash install.sh      # needs python3 and job-runner (~/opt/job-runner/lib.sh); LaunchAgents on macOS, systemd --user on Linux
 bash tests/run.sh    # hermetic</pre>
-    <p class="note">VM deploy: rsync the repo to <code>~/dev/agent-tracker</code> there, run its <code>install.sh</code>; never edit code on the VM. Never <code>uninstall.sh</code> for a layout change: a hand-run step of <code>adhoc_quotas_analysis/migrate_to_target.py</code> instead.</p>
+    <p class="note">VM deploy: rsync the repo to <code>~/dev/agents/agent-tracker</code> there, run its <code>install.sh</code>; never edit code on the VM. Never <code>uninstall.sh</code> for a layout change: a hand-run step of <code>adhoc_quotas_analysis/migrate_to_target.py</code> instead.</p>
     <table>
       <tr><th>Something looks wrong in…</th><th>Look at (on that machine)</th></tr>
       <tr><td>any job: <code>claude-quota</code>, <code>aggregates</code>, <code>codex-*</code></td><td>job-runner's dashboard <code>http://babisnas:8097</code> (each check's status and last line; red when a job stops succeeding); the full output of each run in <code>~/opt/job-runner/logs/agent-tracker.&lt;job&gt;/&lt;machine&gt;/</code>, its statuses in <code>~/opt/job-runner/status/agent-tracker.&lt;job&gt;/&lt;machine&gt;.tsv</code></td></tr>
@@ -748,7 +748,7 @@ job aggregates (Codex part)  5 min  ─▶ transcript_reader.py ◀─ ~/.codex/
 </main>
   <h2 id="sessions">14 · Session files and the <code>agent-tracker</code> command (2026-11)</h2>
   <div class="card">
-    <p class="note">Where each Claude session runs, and its lifecycle: the two facts nobody else keeps and a crash would lose. Formats: <code>FOR_READERS.md</code> section 4; why: <code>~/dev/agent-tracker/DESIGN.md</code>.</p>
+    <p class="note">Where each Claude session runs, and its lifecycle: the two facts nobody else keeps and a crash would lose. Formats: <code>FOR_READERS.md</code> section 4; why: <code>~/dev/agents/agent-tracker/DESIGN.md</code>.</p>
 <pre>Claude Code ──statusLine, every 10 s──▶ agent-tracker tick ──stdout (unchanged)──▶ display (agent-statusline)
                                           ├─▶ data/sessions/&lt;uuid&gt;/last_seen.json   (on a change, or once a minute)
                                           ├─▶ the usage rows (gates 1, 2)

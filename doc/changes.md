@@ -58,7 +58,7 @@ Every change to what agent-tracker (agent-usage-tracker until 2026-11) captures,
 
 ## 2026-11-21: account a in its own folder
 
-`claude_accounts.py`: account a is `~/.claude/account-a/` once it holds a login (`a_moved()`); the Keychain item of every account folder is `Claude Code-credentials-<8 hex of sha256(folder)>`; the default item stays for older sessions. No schema change. Layout and decisions: `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
+`claude_accounts.py`: account a is `~/.claude/account-a/` once it holds a login (`a_moved()`); the Keychain item of every account folder is `Claude Code-credentials-<8 hex of sha256(folder)>`; the default item stays for older sessions. No schema change. Layout and decisions: `/Users/jeanlescut/dev/infra/my-setup/doc/claude_accounts.html`.
 
 ## 2026-11-21: the account of each slot
 
