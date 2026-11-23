@@ -28,7 +28,7 @@ Sources: a read-only inventory of the repos (file:line in the inventory report),
 | 7 | usage · OTel | pushed by Claude Code | seconds | always running | same db, telemetry | yes | aggregates | seconds |
 | 8 | usage · aggregates | timer | 300 s | 10 runs / 50 min | `data/claude/intermediary.db` | yes | 5-min slots → VM | ≤ 300 s |
 | 9 | usage · quota polls | timer | 60 s | 46 runs / 50 min | `account_quotas.db` | yes | statusline | 110–480 s, by design |
-| 10 | my-setup · Chrome kit hook | hooks Pre/PostToolUse, UserPromptSubmit, Stop, SubagentStop | per event | 2 writes / 60 s | `~/opt/my-setup/state/chrome/` | yes | the hook, agent-chrome (UUID + subagent) | none; tabs only |
+| 10 | my-setup · Chrome kit hook | hooks Pre/PostToolUse, UserPromptSubmit, Stop, SubagentStop | per event | 2 writes / 60 s | `~/opt/agent-chrome/state/` | yes | the hook, agent-chrome (UUID + subagent) | none; tabs only |
 | 11 | my-setup · cc-map, cc-rc | read time | when typed | | nothing | | skill claude-sessions-overview (tmux pane → process tree → pid) | none |
 | 12 | my-setup · terminal_snapshot.py | by hand | — | last run 2026-11-01 | `~/.local/state/terminal-snapshot/*_restore.sh` | yes | the user (tmux pane → process tree → pid) | 6 days |
 | 13 | my-setup · resurrect + continuum (2026-11-07) | tmux redraw | 300 s | **2 saves in 30 min** | `~/opt/my-setup/state/tmux/resurrect/` | yes | Ctrl-b then Ctrl-r | 20 min; Claude panes come back empty |
