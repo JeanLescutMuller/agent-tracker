@@ -238,13 +238,7 @@ for entry in $JOBS; do
     _schedule job "com.jeanlescut.agent-tracker.$JOB" "$JOB.sh every ${INTERVAL}s"
 done
 JOB="" INTERVAL=""
-# Not on the VM: its telemetry receiver is the NAS's since 2026-11-19, and a VM deploy switched a second one back on
-# (2026-11-22, task V7 of ~/dev/data-reorganisation). The VM keeps only claude-quota and aggregates until it goes.
-if [ "$MACHINE" = H-Frank-1 ]; then
-    skip "telemetry receiver: not on the VM (the NAS runs it; V7, 2026-11-22)"
-else
-    _schedule com.jeanlescut.agent-tracker.otel com.jeanlescut.agent-tracker.otel "telemetry receiver on 127.0.0.1:4318"
-fi
+_schedule com.jeanlescut.agent-tracker.otel com.jeanlescut.agent-tracker.otel "telemetry receiver on 127.0.0.1:4318"
 [ -f "$HOME/opt/job-runner/lib.sh" ] || skip "job-runner is not installed (~/opt/job-runner/lib.sh missing): every check fails until it is"
 
 if [ "$OS" != Darwin ] && [ -z "${AGENT_TRACKER_SKIP_LAUNCHD:-}" ]; then

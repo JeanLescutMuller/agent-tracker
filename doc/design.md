@@ -350,7 +350,7 @@ VM deploy: rsync the repo to `~/dev/agent-tracker` there, run its `install.sh`; 
 
 | Something looks wrong in… | Look at (on that machine) |
 |---|---|
-| any job | job-runner's dashboard `http://h-frank-1:8097`; each run's output in `~/opt/job-runner/logs/agent-tracker.<job>/<machine>/`, its statuses in `~/opt/job-runner/status/agent-tracker.<job>/<machine>.tsv` |
+| any job | job-runner's dashboard `http://babisnas:8097`; each run's output in `~/opt/job-runner/logs/agent-tracker.<job>/<machine>/`, its statuses in `~/opt/job-runner/status/agent-tracker.<job>/<machine>.tsv` |
 | the quota on the status line | `data/claude/quota_latest.json`; `logs/tick-errors.log` (absent if `tick` never failed); before the switch, `logs/statusline_reader.err`; then `SELECT * FROM latest` |
 | the session files | `agent-tracker check` (one line per problem), `agent-tracker now`; `logs/tick-errors.log`, `logs/hook-errors.log` |
 | the sync | the Mac's `claude-quota` last line (`sync ↑n ↓n` or `H-Frank-1 not reached`); `state/sync/claude_quotas.json` |
