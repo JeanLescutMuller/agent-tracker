@@ -31,9 +31,9 @@ assert_eq "a, b (c: bad uuid kept as not logged in; a folder with a space is no 
 section "the cache tick reads: only the logged-in accounts, rewritten only on a change"
 py "c.write_cache(c.local_accounts())"
 assert_eq "a and b" "a b" "$(jq -r '.accounts | to_entries | map(.value.name) | join(" ")' "$AGENT_TRACKER_HOME/data/claude/accounts.json")"
-T1="$(stat -f %m "$AGENT_TRACKER_HOME/data/claude/accounts.json" 2>/dev/null || stat -c %Y "$AGENT_TRACKER_HOME/data/claude/accounts.json")"
+T1="$(stat -c %Y "$AGENT_TRACKER_HOME/data/claude/accounts.json" 2>/dev/null || stat -f %m "$AGENT_TRACKER_HOME/data/claude/accounts.json")"
 sleep 1.1; py "c.write_cache(c.local_accounts())"
-assert_eq "unchanged content: not rewritten" "$T1" "$(stat -f %m "$AGENT_TRACKER_HOME/data/claude/accounts.json" 2>/dev/null || stat -c %Y "$AGENT_TRACKER_HOME/data/claude/accounts.json")"
+assert_eq "unchanged content: not rewritten" "$T1" "$(stat -c %Y "$AGENT_TRACKER_HOME/data/claude/accounts.json" 2>/dev/null || stat -f %m "$AGENT_TRACKER_HOME/data/claude/accounts.json")"
 assert_eq "a session on account b" "b $UB" "$(py "x = c.session_account({'CLAUDE_CONFIG_DIR': '$HOME/.claude/account-b/'}); print(x['name'], x['org_uuid'])")"
 assert_eq "a session on the default folder" "a $UA" "$(py "x = c.session_account({}); print(x['name'], x['org_uuid'])")"
 
