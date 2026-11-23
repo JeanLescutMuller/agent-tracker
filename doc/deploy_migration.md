@@ -1,12 +1,12 @@
 # Deploy: agent-usage-tracker → agent-tracker (v1, branch `agent-tracker-v1`)
 
-What the real deploy must do, once, on each machine. Nothing here was run on a real machine: the build ran only in sandboxes (`~/dev/agent-tracker/IMPLEMENTATION.md` §1). `install.sh` carries no migration logic (`AGENTS.md`, "Install, deploy"): it **refuses to run** while `~/opt/agent-usage-tracker/data` exists and `~/opt/agent-tracker/data` does not, so step 3 below cannot be skipped by mistake.
+What the real deploy must do, once, on each machine. Nothing here was run on a real machine: the build ran only in sandboxes (`~/dev/agents/agent-tracker/IMPLEMENTATION.md` §1). `install.sh` carries no migration logic (`AGENTS.md`, "Install, deploy"): it **refuses to run** while `~/opt/agent-usage-tracker/data` exists and `~/opt/agent-tracker/data` does not, so step 3 below cannot be skipped by mistake.
 
 ## What changes
 
 | | Before | After |
 |---|---|---|
-| repo, `~/dev` folder | `agent-usage-tracker` | `agent-tracker` (rename on GitHub, then `git remote set-url`, `mv ~/dev/agent-usage-tracker ~/dev/agent-tracker`) |
+| repo, `~/dev` folder | `agent-usage-tracker` | `agent-tracker` (rename on GitHub, then `git remote set-url`, `mv ~/dev/agent-usage-tracker ~/dev/agents/agent-tracker`) |
 | deploy root | `~/opt/agent-usage-tracker` | `~/opt/agent-tracker` |
 | triggers | `com.jeanlescut.agent-usage-tracker.{claude-quota,aggregates,codex-quota,codex-plan-history,otel}` | `com.jeanlescut.agent-tracker.*` (same jobs) |
 | job-runner job names | `agent-usage-tracker.<job>` | `agent-tracker.<job>` |
@@ -27,9 +27,9 @@ What the real deploy must do, once, on each machine. Nothing here was run on a r
 
 | # | Step | Command (Mac; VM the same with `systemctl`, done by the same scripts) |
 |---|---|---|
-| 1 | Stop and remove the old triggers (telemetry receiver included: the new one binds the same port 4318) | `for j in claude-quota aggregates codex-quota codex-plan-history otel; do python3 ~/dev/agent-tracker/adhoc_quotas_analysis/migrate_to_target.py remove-trigger $j; done` (its `--runtime` defaults to the old tree, its labels are the old ones; VM: no Codex jobs, harmless). Never the old `uninstall.sh`: it removes the telemetry `env` keys and `state/` |
+| 1 | Stop and remove the old triggers (telemetry receiver included: the new one binds the same port 4318) | `for j in claude-quota aggregates codex-quota codex-plan-history otel; do python3 ~/dev/agents/agent-tracker/adhoc_quotas_analysis/migrate_to_target.py remove-trigger $j; done` (its `--runtime` defaults to the old tree, its labels are the old ones; VM: no Codex jobs, harmless). Never the old `uninstall.sh`: it removes the telemetry `env` keys and `state/` |
 | 2 | Move the data and the state (watermarks of the sync and the send: without them, everything is resent) | `mkdir -p ~/opt/agent-tracker && mv ~/opt/agent-usage-tracker/data ~/opt/agent-tracker/data && mv ~/opt/agent-usage-tracker/state ~/opt/agent-tracker/state` (one filesystem: renames; WAL files move with their databases) |
-| 3 | Install | `bash ~/dev/agent-tracker/install.sh` (VM: rsync the repo to `~/dev/agent-tracker` there first) |
+| 3 | Install | `bash ~/dev/agents/agent-tracker/install.sh` (VM: rsync the repo to `~/dev/agents/agent-tracker` there first) |
 | 4 | Right away, bridge the old statusline reader (still run by the old display until the statusline switch, step 3 of "Order") to the new code, so its readings land in the new tree (verified in a sandbox: a symlinked wrapper writes into `~/opt/agent-tracker`) | `ln -sf ~/opt/agent-tracker/src/statusline_payload_reader.py ~/opt/agent-usage-tracker/src/statusline_payload_reader.py` |
 | 5 | Dashboard: the old job names are gone | on the VM, for each old job: `f=~/opt/job-runner/conf/agent-usage-tracker.<job>.conf; { cat $f 2>/dev/null; echo DECOMMISSIONED=1; } > $f.new && mv -f $f.new $f` (skill jobs-and-services §4) |
 | 6 | Codex (Mac) | start one `codex` session and approve agent-tracker's hooks once |
@@ -43,7 +43,7 @@ What the real deploy must do, once, on each machine. Nothing here was run on a r
 | agent-statusline | deploy the display that reads `quota_latest.json` and writes no heartbeat | the quota jobs no longer read the heartbeat |
 | job-applications (auto-job-apply) | `runner/limits.py`: the database path `~/opt/agent-tracker/data/claude/account_quotas.db` | it reads the view `latest` there |
 | job-runner | its `examples/agent-usage-tracker/` copies of the entrypoints and `doc/examples.md`: the new name and `claude-quota.sh`'s `last-seen-age` line | job-runner tests them |
-| tasks, my-context (`projects.md`), secrets-and-account-migration | the name and paths | they mention the old ones |
+| tasks, about-me (`projects.md`), secrets-and-account-migration | the name and paths | they mention the old ones |
 | Todoist | this repo's tasks carry `Repo: agent-usage-tracker`: rename the label text, then `todo.html` | `AGENTS.md` points there |
 
 Until the statusline is switched, `tick` is not running: no `last_seen.json`, so the quota jobs use their idle thresholds (300 s Mac, 480 s VM) and `agent-tracker check` reports every open Claude session. Claude sessions opened before the deploy have no start line until they are restarted (the hooks load at start).
@@ -56,4 +56,4 @@ agent-tracker now            # every open Claude session, with its pane
 ls ~/opt/agent-usage-tracker/data 2>/dev/null   # empty, or only the few seconds of readings between steps 2 and 4 (statusline duplicates: safe to drop)
 ```
 
-Not verified before the deploy: the Linux code paths of `agent_tracker.py` (`/proc/<pid>/stat`, `/proc/stat` btime, `/proc/<pid>/cmdline`; the Mac uses libproc / sysctl, tested) - on the VM, run one `agent-tracker tick < payload` by hand and look at `pid`, `pid_start`, `boot_ts` in its `last_seen.json`; whether Claude Code's statusline ticks while its pane is hidden (`~/dev/agent-tracker/DESIGN.md`, open points).
+Not verified before the deploy: the Linux code paths of `agent_tracker.py` (`/proc/<pid>/stat`, `/proc/stat` btime, `/proc/<pid>/cmdline`; the Mac uses libproc / sysctl, tested) - on the VM, run one `agent-tracker tick < payload` by hand and look at `pid`, `pid_start`, `boot_ts` in its `last_seen.json`; whether Claude Code's statusline ticks while its pane is hidden (`~/dev/agents/agent-tracker/DESIGN.md`, open points).

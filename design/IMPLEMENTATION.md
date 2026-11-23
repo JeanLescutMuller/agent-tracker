@@ -10,7 +10,7 @@ The build of [`DESIGN.md`](DESIGN.md) (read it first; its words are in [`AGENTS.
 | write under the real `~/opt`, `~/.claude`, `~/.codex`, `~/.local/bin`, `~/Library/LaunchAgents`, crontab; call `launchctl`, `systemctl`, `ssh H-Frank-1` | sandbox paths only (below) |
 | run `tmux` against the default server (the user's 14 live Claude sessions) | always `export TMUX_TMPDIR=<sandbox>/tmux` first: a separate tmux server |
 | `kill` a process you did not start; `send-keys` to a real pane | fake `claude` = a script you start in the sandbox |
-| edit the user's working copies in `~/dev/<repo>` | edit only your worktree (below) |
+| edit the user's working copies in `~/dev/<category>/<repo>` | edit only your worktree (below) |
 | `git push`, open PRs, rename GitHub repos | commit on `agent-tracker-v1` in your worktree |
 
 Sandbox: `S=$(mktemp -d)`, then `export HOME=$S/home CLAUDE_CONFIG_DIR=$S/home/.claude AGENT_TRACKER_HOME=$S/home/opt/agent-tracker AGENT_RESUME_HOME=$S/home/opt/agent-resume TMUX_TMPDIR=$S/tmux JR_MACHINE_NAME=test-machine`. Long outputs go to a log file; read only what you need (the user has few tokens).

@@ -74,7 +74,7 @@ assert_contains "an SDK run under ~/opt is a scheduled run, its tokens without \
 assert_contains "--span day" "$(python3 "$A/usage_split.py" --span day 2>&1)" "pro 2026-09-15: \$6.00"
 
 section "load.py"
-assert_eq "project()" "alpha beta ~ ~/dev ? /tmp/x" "$(cd "$A" && python3 -c "import load; print(*[load.project(f) for f in ('/Users/x/dev/alpha/a', '/home/x/opt/beta', '/Users/x', '/Users/x/dev', '', '/tmp/x')])")"
+assert_eq "project()" "alpha beta ~ ~/dev ? /tmp/x gamma delta" "$(cd "$A" && python3 -c "import load; print(*[load.project(f) for f in ('/Users/x/dev/alpha/a', '/home/x/opt/beta', '/Users/x', '/Users/x/dev', '', '/tmp/x', '/Users/x/dev/agents/gamma/a', '/private/tmp/claude-1/-Users-x-dev-infra-delta/s')])")"
 assert_eq "kind()" "development|test run|scheduled run|?" "$(cd "$A" && python3 -c "import load; print(load.kind('/Users/x/dev/a', 'cli'), load.kind('/Users/x/dev/a', 'sdk-cli'), load.kind('/Users/x/opt/a', 'sdk-py'), load.kind('', ''), sep='|')")"
 assert_eq "the databases are unchanged: every script only reads" "$before" "$(md5)"
 

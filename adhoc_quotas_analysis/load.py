@@ -119,18 +119,21 @@ def slots() -> list[dict]:
     return sorted(l_out, key=lambda d_s: d_s["ts"])
 
 
+CATEGORIES = "agents|infra|personal|professional"   # ~/dev/<category>/<repo> since the projects restructure (2026-11)
+
+
 def project(folder: str) -> str:
-    """A slot's folder reduced to its repo: ~/dev/<x>/… or ~/opt/<x>/… -> <x>; a Claude Code scratchpad
-    (/private/tmp/claude-<uid>/-Users-<me>-dev-<x>/…) -> <x>; the home folder and ~/dev itself -> "~", "~/dev";
+    """A slot's folder reduced to its repo: ~/dev/<category>/<x>/…, ~/dev/<x>/… (before the restructure) or ~/opt/<x>/… -> <x>; a Claude Code scratchpad
+    (/private/tmp/claude-<uid>/-Users-<me>-dev-[<category>-]<x>/…) -> <x>; the home folder and ~/dev itself -> "~", "~/dev";
     no folder (telemetry of a session without transcript) -> "?"; anything else as it is."""
     if not folder:
         return "?"
     m = re.match(r"^/(?:Users|home)/[^/]+(/.*)?$", folder)
     rest = (m.group(1) or "") if m else None
     if rest is not None:
-        m2 = re.match(r"^/(?:dev|opt)/([^/]+)", rest)
+        m2 = re.match(rf"^/(?:dev/(?:(?:{CATEGORIES})/)?|opt/)([^/]+)", rest)
         return m2.group(1) if m2 else "~" + rest
-    m = re.match(r"^/private/tmp/claude-\d+/-(?:Users|home)-[^/]*?-(?:dev|opt)-([^/]+)", folder)
+    m = re.match(rf"^/private/tmp/claude-\d+/-(?:Users|home)-[^/]*?-(?:dev-(?:(?:{CATEGORIES})-)?|opt-)([^/]+)", folder)
     return m.group(1) if m else folder
 
 

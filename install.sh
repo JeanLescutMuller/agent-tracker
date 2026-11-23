@@ -35,7 +35,7 @@
 # created by the gates on first write, data/sessions/ by the first tick or hook.
 # The statusLine chain (`agent-tracker tick | display`) is my-setup's, not ours.
 # Does NOT deploy adhoc_quotas_analysis/: run-by-hand research tooling stays
-# in ~/dev/agent-tracker (on the NAS, the development home) and runs from there (~/opt is for what a
+# in ~/dev/agents/agent-tracker (on the NAS, the development home) and runs from there (~/opt is for what a
 # scheduler runs unattended).
 #
 # Independent of agent-statusline: either can be installed first, or alone.
@@ -239,7 +239,7 @@ for entry in $JOBS; do
 done
 JOB="" INTERVAL=""
 # Not on the VM: its telemetry receiver is the NAS's since 2026-11-19, and a VM deploy switched a second one back on
-# (2026-11-22, task V7 of ~/dev/data-reorganisation). The VM keeps only claude-quota and aggregates until it goes.
+# (2026-11-22, task V7 of ~/dev/infra/data-reorganisation). The VM keeps only claude-quota and aggregates until it goes.
 if [ "$MACHINE" = H-Frank-1 ]; then
     skip "telemetry receiver: not on the VM (the NAS runs it; V7, 2026-11-22)"
 else

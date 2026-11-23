@@ -1,6 +1,6 @@
 # Plan: several Claude accounts on one machine (2026-11-19)
 
-> **Status 2026-11-22: implemented, everything below is done; the "main account" this plan speaks of was removed the same day (schema v5: no `is_main`, `latest` = the account with the most room, one `quota_latest.<name>.json` per account, see `doc/design.md` §3.5).** Where the build differs from this plan: account **a** is now `~/.claude/account-a/` like b (layout symmetrical since 2026-11-21; this plan says "a = `~/.claude`" and "`is_main` = the default folder": a is the main account by name, the folder is no longer special); the picking of the account by quota (Phase 4) is "most room left", for `claude -p`, SDK and no-terminal calls; the 5-minute `slots` by account (Phase 4) exist (`slots.account`); `claude-account` is `~/.claude`'s `claude` on every PATH, not an alias. The overview for the user, with the decisions and the lessons: `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
+> **Status 2026-11-22: implemented, everything below is done; the "main account" this plan speaks of was removed the same day (schema v5: no `is_main`, `latest` = the account with the most room, one `quota_latest.<name>.json` per account, see `doc/design.md` §3.5).** Where the build differs from this plan: account **a** is now `~/.claude/account-a/` like b (layout symmetrical since 2026-11-21; this plan says "a = `~/.claude`" and "`is_main` = the default folder": a is the main account by name, the folder is no longer special); the picking of the account by quota (Phase 4) is "most room left", for `claude -p`, SDK and no-terminal calls; the 5-minute `slots` by account (Phase 4) exist (`slots.account`); `claude-account` is `~/.claude`'s `claude` on every PATH, not an alias. The overview for the user, with the decisions and the lessons: `/Users/jeanlescut/dev/infra/my-setup/doc/claude_accounts.html`.
 
 
 Written by Claude Opus for an implementer (Claude Sonnet). The user decided the design below. Change a **decision** only by asking the user. Pick freely only the details marked *(free)*.
@@ -95,13 +95,13 @@ Vocabulary (repo `AGENTS.md`, plus these):
 
 ## 4. Phase 3: the readers
 
-1. **agent-statusline** (`~/dev/agent-statusline/providers/claude-statusline-command.sh`; its own repo and README; commit there):
+1. **agent-statusline** (`~/dev/agents/agent-statusline/providers/claude-statusline-command.sh`; its own repo and README; commit there):
    - `quota_file` = `quota_latest.json` when `CLAUDE_ACCOUNT` is empty or `a`, else `quota_latest.$CLAUDE_ACCOUNT.json`.
    - Show the account when it isn't `a` *(free placement, e.g. `[b]` before the model)*.
    - Add the other accounts' week % (D9): read every other `quota_latest*.json`, apply the same reset rule, render ` · b 12%w` *(free exact format; keep it short)*.
    - Its tests, if any (`tests/`).
    - Contract note in its README "agent-tracker" section.
-2. **agent-quota** (`~/dev/agent-quota`, the PreToolUse hook on every tool): today it reads the main account. A session on b would be throttled by a's quota. **Minimal fix:** when `CLAUDE_ACCOUNT` is set and ≠ `a`, read `quota_latest.<name>.json` / `latest_by_account`. If that is not trivial, do nothing and add a Todoist task for it (skill `tasks`, `Repo: agent-quota`). Either way, tell the user.
+2. **agent-quota** (`~/dev/agents/agent-quota`, the PreToolUse hook on every tool): today it reads the main account. A session on b would be throttled by a's quota. **Minimal fix:** when `CLAUDE_ACCOUNT` is set and ≠ `a`, read `quota_latest.<name>.json` / `latest_by_account`. If that is not trivial, do nothing and add a Todoist task for it (skill `tasks`, `Repo: agent-quota`). Either way, tell the user.
 3. **tasks, auto-job-apply, trading-bot killswitch**: no change (D2: they run on account a). Mention them in `FOR_READERS.md`.
 
 ## 5. Phase 4 (not now)
@@ -122,8 +122,8 @@ Vocabulary (repo `AGENTS.md`, plus these):
 
 1. `bash tests/run.sh` green (log to a file, read only failures: the user has few tokens).
 2. Commit in agent-tracker (and agent-statusline, agent-quota). Use the trailers of the global rules. Never push.
-3. **Mac**: `bash ~/dev/agent-tracker/install.sh`, then the migration step(s) of D10 on `~/opt/agent-tracker/data/claude/*.db` (they archive first).
-4. **NAS** (the central, `ssh babisnas`; a home-LAN host, `babisnas-tailscale` when away): the same code must run there, because the sync stores raw rows through the NAS's gate. Follow `doc/deploy_migration.md` / `design/DEPLOY.md` for how code reaches the NAS (rsync to `~/dev/agent-tracker`, `install.sh`), then run the migration step there. **Ask the user before touching the NAS** if those docs leave any doubt.
+3. **Mac**: `bash ~/dev/agents/agent-tracker/install.sh`, then the migration step(s) of D10 on `~/opt/agent-tracker/data/claude/*.db` (they archive first).
+4. **NAS** (the central, `ssh babisnas`; a home-LAN host, `babisnas-tailscale` when away): the same code must run there, because the sync stores raw rows through the NAS's gate. Follow `doc/deploy_migration.md` / `design/DEPLOY.md` for how code reaches the NAS (rsync to `~/dev/agents/agent-tracker`, `install.sh`), then run the migration step there. **Ask the user before touching the NAS** if those docs leave any doubt.
 5. **VM** (H-Frank-1): it also runs the poller (`SILENT_AFTER_MIN@H-Frank-1` in `claude-quota.conf`). Deploy the same way, migrate. Then remove the proof of concept there:
    - Look first, then delete one literal path at a time: `~/.claude/shared`, `~/.claude/account-a`, `~/.claude/account-b`, `~/.claude/poc-claude-acct.sh`, `~/claude-poc-work`.
    - Its PoC logins are separate grants, so removing them doesn't affect the VM's real login.

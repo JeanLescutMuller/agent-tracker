@@ -9,7 +9,7 @@ agent-usage-tracker until 2026-11 (renamed when it grew the session files, §14)
 | Words | the `## Vocabulary` table of `AGENTS.md` |
 | History | the migration plan and the record of the open questions: `git show 1ced0c4:design/MIGRATION_PLAN.md`, `git show 1ced0c4:design/OPEN_QUESTIONS.md` |
 | Changed 2026-10-12 | P13 `data/claude/intermediary.db` replaces `intermediary/claude/`; P14 one `aggregates` file per machine in `data/claude/aggregates/`, replacing `central/` (§11); built the same day, 18:45 UTC (`migrate_to_target.py data-layout`) |
-| Changed 2026-11-07 | the session files `data/sessions/<uuid>/` and the `agent-tracker` command (`tick`, `hook start\|end`, `now`, `check`), `data/<agent>/quota_latest.json`, the deploy root `~/opt/agent-tracker`; the quota jobs read last seen instead of the statusline's heartbeat (§3.4, §7.1, §14). Why: `~/dev/agent-tracker/DESIGN.md` (moves into this repo at its step 1b). Deploy: `doc/deploy_migration.md` |
+| Changed 2026-11-07 | the session files `data/sessions/<uuid>/` and the `agent-tracker` command (`tick`, `hook start\|end`, `now`, `check`), `data/<agent>/quota_latest.json`, the deploy root `~/opt/agent-tracker`; the quota jobs read last seen instead of the statusline's heartbeat (§3.4, §7.1, §14). Why: `~/dev/agents/agent-tracker/DESIGN.md` (moves into this repo at its step 1b). Deploy: `doc/deploy_migration.md` |
 | Open work | Todoist (skill `tasks`): its tasks carry `Repo: agent-usage-tracker`; [`todo.html`](../todo.html) shows them |
 
 ## 1. The four categories, and the picture
@@ -62,7 +62,7 @@ Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machine
 | 4 | — | — | a reader builds it from 1 + 3 | — | — |
 
 ```
-~/dev/agent-tracker/          the repo (development: Mac only)
+~/dev/agents/agent-tracker/          the repo (development: Mac only)
 ├── README.html                     the same design drawn, for Jean (the only README)
 ├── AGENTS.md                       rules for working on it, the vocabulary, which file answers what
 ├── FOR_READERS.md                  how other projects read the data
@@ -162,7 +162,7 @@ Idle, both poll less often: the reset rule (§3.2) covers the window ends.
 
 ### 3.5 Several Claude accounts (2026-11-19)
 
-my-setup's `claude-account` lets one machine run sessions on several claude.ai accounts: every account is a folder `~/.claude/account-NAME/` (`a`, `b`...; its sessions have `CLAUDE_CONFIG_DIR` set to it and `CLAUDE_ACCOUNT=NAME`); account `a` was Claude Code's default folder `~/.claude` until 2026-11-21. No account is preferred (2026-11-22). An account's id is its **organization uuid** (`oauthAccount.organizationUuid` of its `.claude.json`; header `anthropic-organization-id`; telemetry attribute `organization.id`): the same on every machine. The plan: `doc/plan_multi_account_2026-11-19.md`. The overview for the user (why, designs, how to use it, every piece across the repos): `/Users/jeanlescut/dev/my-setup/doc/claude_accounts.html`.
+my-setup's `claude-account` lets one machine run sessions on several claude.ai accounts: every account is a folder `~/.claude/account-NAME/` (`a`, `b`...; its sessions have `CLAUDE_CONFIG_DIR` set to it and `CLAUDE_ACCOUNT=NAME`); account `a` was Claude Code's default folder `~/.claude` until 2026-11-21. No account is preferred (2026-11-22). An account's id is its **organization uuid** (`oauthAccount.organizationUuid` of its `.claude.json`; header `anthropic-organization-id`; telemetry attribute `organization.id`): the same on every machine. The plan: `doc/plan_multi_account_2026-11-19.md`. The overview for the user (why, designs, how to use it, every piece across the repos): `/Users/jeanlescut/dev/infra/my-setup/doc/claude_accounts.html`.
 
 ```
 session on account X ──tick──► account_quotas (account = uuid of X) ──► latest_by_account ──► quota_latest.X.json ──► status line of X
@@ -228,7 +228,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 Key: UNIQUE (`ts`, `machine`, `folder`, `entrypoint`, `job`, `account`, `model`). Written once, when final; never changed. No percent, ever. Example, two real requests:
 
 ```
-ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/trading-bot · cli · claude-opus-5-5
+ts 2026-10-10T19:10:00Z · chan-lescut-macbook-pro · /Users/jeanlescut/dev/professional/trading-bot · cli · claude-opus-5-5
 requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 724 · write unknown 0 · usd 0.1416 (0.0686 + 0.0730) · without usd 0
 ```
 
@@ -346,7 +346,7 @@ bash install.sh      # needs python3 and job-runner (~/opt/job-runner/lib.sh); L
 bash tests/run.sh    # hermetic
 ```
 
-VM deploy: rsync the repo to `~/dev/agent-tracker` there, run its `install.sh`; never edit code on the VM. Never `uninstall.sh` for a layout change: a hand-run step of `adhoc_quotas_analysis/migrate_to_target.py` instead.
+VM deploy: rsync the repo to `~/dev/agents/agent-tracker` there, run its `install.sh`; never edit code on the VM. Never `uninstall.sh` for a layout change: a hand-run step of `adhoc_quotas_analysis/migrate_to_target.py` instead.
 
 | Something looks wrong in… | Look at (on that machine) |
 |---|---|
@@ -440,7 +440,7 @@ Open for that day: Codex session-file retention; usage no local file sees (cloud
 
 ## 14. Session files and the `agent-tracker` command (2026-11)
 
-The two facts about a Claude session that nobody else keeps and a crash would lose: where it runs, and its lifecycle. Formats: `FOR_READERS.md` §4 (the contract); why: `~/dev/agent-tracker/DESIGN.md` §4–§6. Code: `src/agent_tracker.py`.
+The two facts about a Claude session that nobody else keeps and a crash would lose: where it runs, and its lifecycle. Formats: `FOR_READERS.md` §4 (the contract); why: `~/dev/agents/agent-tracker/DESIGN.md` §4–§6. Code: `src/agent_tracker.py`.
 
 ```
 Claude Code ──statusLine, every 10 s──▶ agent-tracker tick ──stdout (unchanged)──▶ display (agent-statusline)
