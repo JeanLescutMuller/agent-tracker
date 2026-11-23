@@ -277,7 +277,7 @@ Since 2026-11 (deployed with the rename, `doc/deploy_migration.md`): the display
 
 | Interface | Written by | Read by | What |
 |---|---|---|---|
-| `agent-tracker tick` in the `statusLine` chain | my-setup (`modules/claude_config.sh`) | Claude Code runs it every 10 s + each message | copies stdin to stdout byte for byte, then `last_seen.json`, the usage rows, `quota_latest.json` (§14) |
+| `agent-tracker tick` in the `statusLine` chain | my-setup (`claude-config/modules/claude_config.sh`) | Claude Code runs it every 10 s + each message | copies stdin to stdout byte for byte, then `last_seen.json`, the usage rows, `quota_latest.json` (§14) |
 | `~/opt/agent-tracker/data/claude/quota_latest.json` | this repo: `tick` (statusline readings) and the pollers (their own and synced readings), when fresher | agent-statusline's Claude provider | the account's freshest reading, `rate_limits` shape; the reader applies the reset rule (`FOR_READERS.md` §4) |
 
 Until that switch, the old interface below still works: the compatibility wrapper `statusline_payload_reader.py`.

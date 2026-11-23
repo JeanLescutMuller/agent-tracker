@@ -9,7 +9,7 @@ Written by Claude Opus for an implementer (Claude Sonnet). The user decided the 
 
 | Piece | Where | State |
 |---|---|---|
-| `claude-account` wrapper; `claude` is an alias for it | my-setup `files/claude_account.sh` (commit `dc75d27`), deployed `~/opt/my-setup/bin/claude-account` | ✅ installed on the Mac |
+| `claude-account` wrapper; `claude` is an alias for it | my-setup `claude-config/files/claude_account.sh` (commit `dc75d27`), deployed `~/opt/my-setup/bin/claude-account` | ✅ installed on the Mac |
 | Account **a** | `~/.claude` itself + `~/.claude.json` + Keychain item `Claude Code-credentials` (Linux: `~/.claude/.credentials.json`) | the user's main account, org `735a1078-9c43-4e63-85fa-ab5794a29aca`, Max |
 | Account **NAME** (e.g. `b`) | `~/.claude/account-NAME/`: own `.claude.json` + own login; links `../<item>` for the shared items | created by `claude-account --add NAME`, then `claude --account NAME` and `/login` |
 | Env of every session started by the wrapper | `CLAUDE_ACCOUNT=<name>`; `CLAUDE_CONFIG_DIR=~/.claude/account-NAME` for NAME ≠ a (unset for a) | inherited by hooks and by the status line command (`agent-tracker tick \| statusline-command.sh`) |
