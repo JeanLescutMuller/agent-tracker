@@ -17,6 +17,7 @@ agent-usage-tracker until 2026-11; a data layer (`doc/design.md` §14). For *wor
 | What do the percents mean in $ and tokens? | `adhoc_quotas_analysis/CONCLUSIONS.md` (its own `AGENTS.md`) |
 | What is left to do? | Todoist (skill `tasks`): its tasks carry `Repo: agent-usage-tracker`; [`todo.html`](todo.html) shows them |
 | What does each test cover? | `tests/README.md` |
+| The page of tokens and quotas (`usage-dashboard`)? | `doc/design.md` §10; code `src/dashboard.py` + `src/dashboard.html`, look and charts from resource-guard's `dashkit` |
 
 Code: `src/` (deployed flat to `~/opt/agent-tracker/src/`; the gates are `ingest_*.py`; `agent_tracker.py` is the `agent-tracker` command, linked from `~/.local/bin/agent-tracker`), `jobs/` (job-runner entrypoints), `install.sh` / `uninstall.sh`; the full tree is `doc/design.md` §2.
 

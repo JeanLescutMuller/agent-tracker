@@ -422,3 +422,32 @@ def request_usd(model: str | None, inp: int, out: int, cache_read: int, cache_wr
     pin, pout, read_ratio = PRICES[model]
     return (inp * pin + out * pout + cache_read * pin * read_ratio
             + cache_write_5m * pin * 1.25 + cache_write_1h * pin * 2) / 1e6
+
+
+# The repo and kind of use of a slot (Category 3) - used by adhoc_quotas_analysis/ and src/dashboard.py (usage-dashboard).
+CATEGORIES = "agents|infra|personal|professional"   # ~/dev/<category>/<repo> since the projects restructure (2026-11)
+
+
+def project(folder: str) -> str:
+    """A slot's folder reduced to its repo: ~/dev/<category>/<x>/…, ~/dev/<x>/… (before the restructure) or ~/opt/<x>/… -> <x>; a Claude Code scratchpad
+    (/private/tmp/claude-<uid>/-Users-<me>-dev-[<category>-]<x>/… on the Mac, /tmp/claude-<uid>/-home-… on the NAS) -> <x>; the home folder and ~/dev itself -> "~", "~/dev";
+    no folder (telemetry of a session without transcript) -> "?"; anything else as it is."""
+    if not folder:
+        return "?"
+    m = re.match(r"^/(?:Users|home)/[^/]+(/.*)?$", folder)
+    rest = (m.group(1) or "") if m else None
+    if rest is not None:
+        m2 = re.match(rf"^/(?:dev/(?:(?:{CATEGORIES})/)?|opt/)([^/]+)", rest)
+        return m2.group(1) if m2 else "~" + rest
+    m = re.match(rf"^(?:/private)?/tmp/claude-\d+/-(?:Users|home)-[^/]*?-(?:dev-(?:(?:{CATEGORIES})-)?|opt-)([^/]+)", folder)
+    return m.group(1) if m else folder
+
+
+def kind(folder: str, entrypoint: str) -> str:
+    """The kind of use (as Jean asked on 2026-10-07, `TODO/0005`): `cli` = development (interactive);
+    `sdk-*` (claude -p, the Agent SDK) under ~/opt/ = scheduled run, elsewhere = test run; no entrypoint = "?"."""
+    if not entrypoint:
+        return "?"
+    if not entrypoint.startswith("sdk"):
+        return "development"
+    return "scheduled run" if re.match(r"^/(?:Users|home)/[^/]+/opt/", folder or "") else "test run"

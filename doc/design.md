@@ -19,7 +19,7 @@ agent-usage-tracker until 2026-11 (renamed when it grew the session files, §14)
 | **1 · Quotas** | the account's quota readings (5-hour and 7-day %, reset times); failed polls | raw: lost if not stored | both machines, the same rows, synced both ways every 2 min | 2 |
 | **2 · Machine raw** | `sessions_usages.db` (telemetry, statusline session snapshots) + Claude Code's transcripts | raw | **never leaves its machine** | 1 (accepted) |
 | **3 · Aggregates** | Category 2 added up per 5-min slot × machine × folder × entrypoint × job × account × model: one table, `slots` | computed from 2 | each machine computes its own every 5 min; the Mac sends its rows to the VM | 2 for the Mac's rows |
-| **4 · Meta-analysis** | $ or tokens per window, past use by project, machine, interactive vs scheduled | computed from 1 + 3 | **not here: a reader's** (`FOR_READERS.md`) | — |
+| **4 · Meta-analysis** | $ or tokens per window, past use by project, machine, interactive vs scheduled | computed from 1 + 3 | **a reader's** (`FOR_READERS.md`); in this repo only when you look: the page `usage-dashboard` (§10) and `adhoc_quotas_analysis/`, never stored | — |
 
 Data only flows 2 → 3 → 4 and 1 → 4. Only Categories 1 and 3 cross machines.
 
@@ -336,7 +336,7 @@ aggregates.sh ─▶ 1 transcript_reader.py ─▶ intermediary.db           agg
 | the Mac's slots on the VM | LIVE | `data/claude/aggregates/chan-lescut-macbook-pro.db`, the same rows as the Mac's |
 | P13 `data/claude/intermediary.db`, P14 one aggregates file per machine | LIVE | since 2026-10-12 18:45 UTC; the slots still equal a separate count of every request (Mac 3,331, VM 41) |
 | readers: agent-statusline, auto-job-apply | LIVE | the printed line; the view `latest` |
-| Category 4 | PLANNED | a reader's (`FOR_READERS.md`); this repo's own analysis: `adhoc_quotas_analysis/` |
+| Category 4 | PARTIAL | a reader's (`FOR_READERS.md`); this repo's own analysis: `adhoc_quotas_analysis/`; the page `usage-dashboard` (§10, since 2026-11-24) |
 | Codex: `codex-quota`, `codex-plan-history`, its turns (Mac) | LIVE | outside the four categories; its rows no longer reach the VM (§13) |
 
 ## 10. Install, tests, logs, docs
@@ -344,6 +344,14 @@ aggregates.sh ─▶ 1 transcript_reader.py ─▶ intermediary.db           agg
 ```
 bash install.sh      # needs python3 and job-runner (~/opt/job-runner/lib.sh); LaunchAgents on macOS, systemd --user on Linux
 bash tests/run.sh    # hermetic
+```
+
+**The page, `usage-dashboard [--hours 48] [--no-open] [--publish]`** (since 2026-11-24; `src/dashboard.py` + its template `src/dashboard.html`, linked from `~/.local/bin/usage-dashboard`): Claude's token use and both accounts' quotas, built when you look, nothing stored. On the NAS it reads the databases (with `PRAGMA query_only`); anywhere else it runs `usage-dashboard --data` on the NAS over ssh. It writes `~/opt/agent-tracker/out/dashboard.html` and opens it on the Mac; `--publish` updates its private Artifact page (for the phone, through `claude -p`, ~2% of Claude's window). Its look, charts and build are resource-guard's `dashkit` (`~/opt/resource-guard/dashkit/`), shared with `resource-dashboard` (machines' CPU and memory), whose page it links to: green = good, amber = warning, red = bad, every category in a neutral color.
+
+```
+usage-dashboard (Mac) ── ssh babisnas usage-dashboard --data ──► aggregates/*.db (Cat. 3, every machine) + account_quotas.db (Cat. 1)
+        │                                                         └─ JSON: per hour × repo × kind × machine × job × account × model × entrypoint; readings per account
+        └─ dashkit.build ──► ~/opt/agent-tracker/out/dashboard.html: % used now (green / amber / red), quotas over time, use per hour grouped and measured as you pick, one table
 ```
 
 VM deploy: rsync the repo to `~/dev/agents/agent-tracker` there, run its `install.sh`; never edit code on the VM. Never `uninstall.sh` for a layout change: a hand-run step of `adhoc_quotas_analysis/migrate_to_target.py` instead.

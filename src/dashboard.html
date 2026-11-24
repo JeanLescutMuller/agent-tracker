@@ -1,0 +1,121 @@
+<!doctype html>
+<!-- Template of usage-dashboard's page: src/dashboard.py (dashkit.build) puts resource-guard's dashkit (the look and charts shared with
+     resource-dashboard) and the data in place of the DASHKIT_CSS, DASHKIT_JS and DATA placeholders, and writes
+     ~/opt/agent-tracker/out/dashboard.html. Colors: green good, amber warning, red bad (quota %); every category neutral. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude tokens quotas</title>
+<style>/*DASHKIT_CSS*/</style>
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>
+<script>/*DASHKIT_JS*/</script>
+</head>
+<body>
+<script>
+const DATA = /*DATA*/null;
+const { css, el, esc, f1, f2, big } = DK;
+const WARN = 70, BAD = 90;                              // quota %: amber from 70, red from 90
+const usd = x => x == null ? "–" : "$" + (x >= 100 ? x.toFixed(0) : x.toFixed(2));
+const when = t => new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+const inH = t => { if (t == null) return "–"; const s = t - DATA.now; return s <= 0 ? "now" : s < 86400 ? `${(s / 3600).toFixed(1)} h` : `${(s / 86400).toFixed(1)} d`; };
+const ago = t => { const s = DATA.now - t; return s < 120 ? `${s} s ago` : s < 7200 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`; };
+
+DK.header({ title: "Claude: tokens and quotas", nav: DATA.nav, cmd: `usage-dashboard --hours ${DATA.hours}`,
+  sub: `Last ${DATA.hours} h, made ${DATA.made} from agent-tracker on the NAS: every machine's Claude requests (one row per 5 minutes, summed per ${DATA.step === 3600 ? "hour" : "day"}) and both accounts' quota readings. Tokens = input + output + cache read + cache write; "new tokens" leaves out cache reads (cheap, re-read context). $ = Claude Code's own cost figure, when it sent one. Drag on a chart to zoom, double-click to reset.` });
+DK.range(DATA.t0, DATA.now);
+
+// Rows: [bar ts, repo, kind, machine, job, account, model, entrypoint, requests, input, output, cache read, cache write, usd, tokens without usd]
+const DIMS = ["repo", "kind", "machine", "job", "account", "model", "entrypoint"];
+const C = { req: 8, inp: 9, out: 10, cr: 11, cw: 12, usd: 13, nousd: 14 };   // the row's value columns
+const MEASURES = {
+  tokens: { label: "tokens", f: r => r[C.inp] + r[C.out] + r[C.cr] + r[C.cw], fmt: big, y: "tokens" },
+  fresh: { label: "new tokens (no cache reads)", f: r => r[C.inp] + r[C.out] + r[C.cw], fmt: big, y: "tokens" },
+  usd: { label: "$", f: r => r[C.usd] || 0, fmt: usd, y: "$" },
+  requests: { label: "requests", f: r => r[C.req], fmt: big, y: "requests" },
+};
+const tok = r => r[C.inp] + r[C.out] + r[C.cr] + r[C.cw];
+const l_acc = [...new Set(DATA.latest.map(l => l.name).concat(Object.keys(DATA.quota)))].sort();
+const accColor = a => l_acc.includes(a) ? DK.color(l_acc.indexOf(a)) : css("--other");   // "(unknown)": gray
+
+// --- Now: one row per account
+document.body.append(el("h2", {}, "Now, per account"));
+const tNow = el("table");
+tNow.innerHTML = "<tr><th>Account</th><th>5-hour %</th><th>resets in</th><th>7-day %</th><th>resets in</th><th>last reading</th><th>requests</th><th>tokens</th><th>new tokens</th><th>$</th></tr>";
+const accIdx = a => DATA.dims.account.indexOf(a);
+for (const a of l_acc) {
+  const l = DATA.latest.find(x => x.name === a) || {}, rs = DATA.rows.filter(r => r[5] === accIdx(a));
+  const sum = f => rs.reduce((s, r) => s + f(r), 0), u = rs.some(r => r[C.usd] != null) ? sum(r => r[C.usd] || 0) : null;
+  const pct = p => `<td class="st" style="color:${DK.status(p, WARN, BAD)}">${p == null ? "–" : p.toFixed(0) + " %"}</td>`;
+  tNow.append(el("tr", {}, `<td><span class="sw" style="background:${accColor(a)}"></span>${esc(a)}</td>` + pct(l.five_hour_pct) + `<td>${inH(l.five_hour_resets_ts)}</td>`
+    + pct(l.seven_day_pct) + `<td>${inH(l.seven_day_resets_ts)}</td>`
+    + `<td class="muted">${l.ts ? `${ago(l.ts)} · ${esc(l.machine || "")} · ${esc((l.source || "").replace("claude_", ""))}` : "–"}</td>`
+    + `<td>${big(sum(r => r[C.req]))}</td><td>${big(sum(tok))}</td><td>${big(sum(MEASURES.fresh.f))}</td><td>${usd(u)}</td>`));
+}
+{ const c = DK.card(document.body); c.append(tNow);
+  c.append(el("div", { className: "legend" }, `% used of the account's quota: <span class="st" style="color:${css("--good")}">under ${WARN} %</span> · <span class="st" style="color:${css("--warn")}">${WARN}–${BAD} %</span> · <span class="st" style="color:${css("--bad")}">${BAD} % and more</span>. Requests, tokens and $: over the page's range; "(unknown)": requests before 2026-11-21 or never seen by telemetry.`)); }
+
+// --- Quotas over time: one line per account, the limit as a red dashed line
+document.body.append(el("h2", {}, "Quotas over time (% used)"));
+const gQ = el("div", { className: "grid2" }); document.body.append(gQ);
+for (const [key, title] of [["five", "5-hour window (% used)"], ["seven", "7-day window (% used)"]]) {
+  const l_ts = [...new Set(Object.values(DATA.quota).flatMap(s => s.ts))].sort((x, y) => x - y);
+  if (!l_ts.length) { gQ.append(el("div", { className: "card err" }, `${title}: no readings in this range`)); continue; }
+  const series = Object.entries(DATA.quota).map(([a, s]) => {
+    const m = new Map(s.ts.map((t, i) => [t, s[key][i]]));
+    return { label: `account ${a}`, color: accColor(a), data: l_ts.map(t => m.has(t) ? m.get(t) : null), spanGaps: true };
+  });
+  series.push({ label: "limit", color: css("--bad"), data: l_ts.map(() => 100), dash: [6, 4] });
+  DK.line(gQ, title, l_ts, series, "%", 105, { fmt: v => v.toFixed(0) + " %" });
+}
+
+// --- Token use: stacked bars per hour, grouped by one dimension
+document.body.append(el("h2", {}, `Use per ${DATA.step === 3600 ? "hour" : "day"}`));
+const ctl = el("div", { className: "ctl" }); document.body.append(ctl);
+const out = el("div"); document.body.append(out);
+let dim = "repo", meas = "tokens";
+DK.choice(ctl, "Group by", DIMS.map(d => [d, d]), dim, k => { dim = k; draw(); });
+DK.choice(ctl, "Measure", Object.entries(MEASURES).map(([k, m]) => [k, m.label]), meas, k => { meas = k; draw(); });
+const bars = [];                                       // every bar's start, empty ones included (even bar widths)
+for (let t = DATA.t0 - DATA.t0 % DATA.step; t <= DATA.now; t += DATA.step) bars.push(t);
+const bi = new Map(bars.map((t, i) => [t, i]));
+
+function draw() {
+  DK.clear(out);
+  const M = MEASURES[meas], di = DIMS.indexOf(dim) + 1, names = DATA.dims[dim];
+  const tot = names.map(() => 0);
+  for (const r of DATA.rows) tot[r[di]] += M.f(r);
+  const order = names.map((n, i) => i).filter(i => tot[i] > 0).sort((x, y) => tot[y] - tot[x]);
+  const shown = order.slice(0, order.length > 9 ? 8 : 9), rest = order.slice(shown.length);
+  const color = (i, k) => dim === "account" ? accColor(names[i]) : DK.color(k);
+  const parts = shown.map((i, k) => ({ label: names[i], color: color(i, k), data: bars.map(() => 0), i }));
+  if (rest.length) parts.push({ label: `${rest.length} others`, color: css("--other"), data: bars.map(() => 0), rest: new Set(rest) });
+  for (const r of DATA.rows) {
+    const p = parts.find(p => p.i === r[di]) || (rest.length && parts[parts.length - 1].rest.has(r[di]) ? parts[parts.length - 1] : null);
+    if (p && bi.has(r[0])) p.data[bi.get(r[0])] += M.f(r);
+  }
+  const g = el("div", { className: "grid2" }); out.append(g);
+  DK.bars(g, `${M.label} per ${DATA.step === 3600 ? "hour" : "day"}, by ${dim}`, bars, parts, M.y, DATA.step, { fmt: M.fmt, axisFmt: meas === "usd" ? (v => "$" + v) : big });
+  // token kinds (whatever the grouping): where the tokens go
+  const kinds = [["input", C.inp], ["output", C.out], ["cache write", C.cw], ["cache read", C.cr]].map(([l, c], k) => ({ label: l, color: DK.color(k + 4), data: bars.map(() => 0), c }));
+  for (const r of DATA.rows) if (bi.has(r[0])) for (const p of kinds) p.data[bi.get(r[0])] += r[p.c];
+  DK.bars(g, `tokens per ${DATA.step === 3600 ? "hour" : "day"}, by kind`, bars, kinds, "tokens", DATA.step);
+
+  // table: every value of the dimension over the range
+  const t = el("table"), all = tot.reduce((a, b) => a + b, 0) || 1;
+  t.innerHTML = `<tr><th>${esc(dim)}</th><th>share of ${esc(M.label)}</th><th>requests</th><th>tokens</th><th>new tokens</th><th>cache reads</th><th>$</th><th>tokens with no $</th></tr>`;
+  for (const i of order) {
+    const rs = DATA.rows.filter(r => r[di] === i), sum = f => rs.reduce((s, r) => s + f(r), 0), T = sum(tok);
+    const k = shown.indexOf(i), sw = `<span class="sw" style="background:${k >= 0 ? color(i, k) : css("--other")}"></span>`;
+    t.append(el("tr", {}, `<td>${sw}${esc(names[i])}</td><td>${(100 * tot[i] / all).toFixed(1)} %</td><td>${big(sum(r => r[C.req]))}</td><td>${big(T)}</td>`
+      + `<td>${big(sum(MEASURES.fresh.f))}</td><td>${T ? (100 * sum(r => r[C.cr]) / T).toFixed(0) + " %" : "–"}</td>`
+      + `<td>${rs.some(r => r[C.usd] != null) ? usd(sum(r => r[C.usd] || 0)) : "–"}</td><td>${T ? (100 * sum(r => r[C.nousd]) / T).toFixed(0) + " %" : "–"}</td>`));
+  }
+  out.append(el("h3", {}, `Every ${esc(dim)} over the last ${DATA.hours} h (by ${esc(M.label)})`));
+  const c = DK.card(out); c.append(t);
+  DK.fit();
+}
+draw();
+</script>
+</body>
+</html>

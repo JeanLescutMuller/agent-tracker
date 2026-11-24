@@ -203,9 +203,10 @@ step "code"
 for f in "$SCRIPT_DIR"/src/*.py; do
     # The settings merge helpers run from the repo (below), never deployed.
     case "$(basename "$f")" in merge_claude_env.py|merge_claude_hooks.py) continue;; esac
-    if [ "$(basename "$f")" = statusline_payload_reader.py ] || [ "$(basename "$f")" = agent_tracker.py ]; then
+    if [ "$(basename "$f")" = statusline_payload_reader.py ] || [ "$(basename "$f")" = agent_tracker.py ] || [ "$(basename "$f")" = dashboard.py ]; then
         # Run directly on every statusline render (agent_tracker.py as `agent-tracker tick`): its first
         # line is this machine's interpreter (-S: no site-packages, faster), and its MACHINE_NAME is filled in.
+        # dashboard.py (usage-dashboard) too: run directly, and usage_db needs Python 3.10+ (not the Mac's /usr/bin/python3).
         tmp="$(mktemp)"
         sed -e "1s|.*|#!$PYTHON3 -S|" "$f" > "$tmp"
         _deploy_rendered "$tmp" "$RUNTIME/src/$(basename "$f")"
@@ -218,12 +219,21 @@ done
 _deploy "$SCRIPT_DIR/src/terminal_snapshot.sh" "$RUNTIME/src/terminal_snapshot.sh"
 # The tmux test guard, for every project's tests (also where this repo is not cloned)
 _deploy "$SCRIPT_DIR/tests/run_with_test_tmux.sh" "$RUNTIME/run_with_test_tmux.sh"
+# usage-dashboard's page template, beside src/dashboard.py (its look and charts: resource-guard's dashkit, ~/opt/resource-guard/dashkit/)
+_deploy "$SCRIPT_DIR/src/dashboard.html" "$RUNTIME/src/dashboard.html"
 mkdir -p "$BIN_DIR"
 if [ "$(readlink "$BIN_DIR/agent-tracker" 2>/dev/null)" = "$RUNTIME/src/agent_tracker.py" ]; then
     ok "$BIN_DIR/agent-tracker"
 else
     ln -sfn "$RUNTIME/src/agent_tracker.py" "$BIN_DIR/agent-tracker"
     installed "$BIN_DIR/agent-tracker -> $RUNTIME/src/agent_tracker.py"
+fi
+# usage-dashboard: Claude's tokens and quotas as a page (src/dashboard.py); on the NAS it also answers the other machines' --data
+if [ "$(readlink "$BIN_DIR/usage-dashboard" 2>/dev/null)" = "$RUNTIME/src/dashboard.py" ]; then
+    ok "$BIN_DIR/usage-dashboard"
+else
+    ln -sfn "$RUNTIME/src/dashboard.py" "$BIN_DIR/usage-dashboard"
+    installed "$BIN_DIR/usage-dashboard -> $RUNTIME/src/dashboard.py"
 fi
 
 step "jobs and their triggers ($([ "$OS" = Darwin ] && echo LaunchAgents || echo 'systemd --user'))"

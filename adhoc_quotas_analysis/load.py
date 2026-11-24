@@ -12,6 +12,7 @@ import datetime as dt
 import os
 import re
 import sqlite3
+import sys
 from pathlib import Path
 
 RUNTIME = Path(os.environ.get("AGENT_TRACKER_HOME") or os.environ.get("AGENT_USAGE_TRACKER_RUNTIME") or "~/opt/agent-tracker").expanduser()
@@ -119,32 +120,9 @@ def slots() -> list[dict]:
     return sorted(l_out, key=lambda d_s: d_s["ts"])
 
 
-CATEGORIES = "agents|infra|personal|professional"   # ~/dev/<category>/<repo> since the projects restructure (2026-11)
-
-
-def project(folder: str) -> str:
-    """A slot's folder reduced to its repo: ~/dev/<category>/<x>/…, ~/dev/<x>/… (before the restructure) or ~/opt/<x>/… -> <x>; a Claude Code scratchpad
-    (/private/tmp/claude-<uid>/-Users-<me>-dev-[<category>-]<x>/…) -> <x>; the home folder and ~/dev itself -> "~", "~/dev";
-    no folder (telemetry of a session without transcript) -> "?"; anything else as it is."""
-    if not folder:
-        return "?"
-    m = re.match(r"^/(?:Users|home)/[^/]+(/.*)?$", folder)
-    rest = (m.group(1) or "") if m else None
-    if rest is not None:
-        m2 = re.match(rf"^/(?:dev/(?:(?:{CATEGORIES})/)?|opt/)([^/]+)", rest)
-        return m2.group(1) if m2 else "~" + rest
-    m = re.match(rf"^/private/tmp/claude-\d+/-(?:Users|home)-[^/]*?-(?:dev-(?:(?:{CATEGORIES})-)?|opt-)([^/]+)", folder)
-    return m.group(1) if m else folder
-
-
-def kind(folder: str, entrypoint: str) -> str:
-    """The kind of use (as Jean asked on 2026-10-07, `TODO/0005`): `cli` = development (interactive);
-    `sdk-*` (claude -p, the Agent SDK) under ~/opt/ = scheduled run, elsewhere = test run; no entrypoint = "?"."""
-    if not entrypoint:
-        return "?"
-    if not entrypoint.startswith("sdk"):
-        return "development"
-    return "scheduled run" if re.match(r"^/(?:Users|home)/[^/]+/opt/", folder or "") else "test run"
+# project() and kind() live in src/usage_db.py since 2026-11-24 (also used by src/dashboard.py, usage-dashboard)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from usage_db import CATEGORIES, project, kind  # noqa: E402,F401
 
 
 def quantiles(l_vals: list[float]) -> str:
