@@ -240,9 +240,9 @@ state.env:  AGENT_STATE=Working  USER_STATE=Acknowledged</pre><div class="note">
 
     <div class="sep">my-setup</div>
     <div class="row">
-      <div class="w c-mys bg-mys"><div class="who">my-setup</div><div class="stream">Chrome kit hook</div><div><span class="trig">⚡ PreToolUse</span><span class="trig">⚡ PostToolUse</span><span class="trig">⚡ UserPromptSubmit</span><span class="trig">⚡ Stop</span><span class="trig">⚡ SubagentStop</span></div></div>
+      <div class="w c-mys bg-mys"><div class="who">chrome-gateways</div><div class="stream">Chrome kit hook</div><div><span class="trig">⚡ PreToolUse</span><span class="trig">⚡ PostToolUse</span><span class="trig">⚡ UserPromptSubmit</span><span class="trig">⚡ Stop</span><span class="trig">⚡ SubagentStop</span></div></div>
       <div class="arrow">→</div>
-      <div class="f"><div class="path">~/opt/agent-chrome/state/ open.json · history/ · sessions/</div><pre>Chrome tabs per (Claude session, subagent):
+      <div class="f"><div class="path">~/opt/chrome-gateways/state/ open.json · history/ · sessions/</div><pre>Chrome tabs per (Claude session, subagent):
 authorization, open tabs, reply_to "#S:#I"</pre><div class="note">tabs, not Claude sessions · stays as it is</div></div>
       <div class="arrow">→</div>
       <div class="r"><div class="rd c-mys"><b>the hook itself</b> <span class="when">at each event</span><br>is this tab allowed?</div><div class="rd c-mys"><b>agent-chrome status</b> <span class="when">by hand</span><br>who opened what</div></div>
@@ -572,7 +572,7 @@ open one iTerm2 tab per tmux session, attached to it</pre><div class="note">exac
       <tr><td class="proj">the crash restore (rebuilding tmux and Claude sessions)</td><td class="no">no: in agent-resume</td><td><code>ares tmux</code></td><td colspan="2"><b>decided (you, 2026-11-07):</b> agent-resume finds and resumes, one Claude session or a whole setup; agent-tracker only says what was where</td></tr>
       <tr><td class="proj">tokens, cost, quotas</td><td class="good">yes: merged</td><td>—</td><td colspan="2"><b>decided (you, 2026-11-07):</b> agent-usage-tracker is already a data layer ("never write: only this project's gates write", its <code>FOR_READERS.md</code>), uses the same tick and the same key (UUID). It grows the session files and is renamed agent-tracker; its databases and jobs stay as they are</td></tr>
       <tr><td class="proj">pane colors</td><td class="no">no</td><td>agent-notify</td><td colspan="2">display, not tracking</td></tr>
-      <tr><td class="proj">Chrome tabs</td><td class="no">no</td><td>my-setup's Chrome kit</td><td colspan="2">tabs, not Claude sessions</td></tr>
+      <tr><td class="proj">Chrome tabs</td><td class="no">no</td><td>chrome-gateways (the Chrome kit)</td><td colspan="2">tabs, not Claude sessions</td></tr>
     </tbody>
   </table>
   </div>

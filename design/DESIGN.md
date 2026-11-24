@@ -28,7 +28,7 @@ Sources: a read-only inventory of the repos (file:line in the inventory report),
 | 7 | usage · OTel | pushed by Claude Code | seconds | always running | same db, telemetry | yes | aggregates | seconds |
 | 8 | usage · aggregates | timer | 300 s | 10 runs / 50 min | `data/claude/intermediary.db` | yes | 5-min slots → VM | ≤ 300 s |
 | 9 | usage · quota polls | timer | 60 s | 46 runs / 50 min | `account_quotas.db` | yes | statusline | 110–480 s, by design |
-| 10 | my-setup · Chrome kit hook | hooks Pre/PostToolUse, UserPromptSubmit, Stop, SubagentStop | per event | 2 writes / 60 s | `~/opt/agent-chrome/state/` | yes | the hook, agent-chrome (UUID + subagent) | none; tabs only |
+| 10 | chrome-gateways · Chrome kit hook | hooks Pre/PostToolUse, UserPromptSubmit, Stop, SubagentStop | per event | 2 writes / 60 s | `~/opt/chrome-gateways/state/` | yes | the hook, agent-chrome (UUID + subagent) | none; tabs only |
 | 11 | my-setup · cc-map, cc-rc | read time | when typed | | nothing | | skill claude-sessions-overview (tmux pane → process tree → pid) | none |
 | 12 | my-setup · terminal_snapshot.py | by hand | — | last run 2026-11-01 | `~/.local/state/terminal-snapshot/*_restore.sh` | yes | the user (tmux pane → process tree → pid) | 6 days |
 | 13 | my-setup · resurrect + continuum (2026-11-07) | tmux redraw | 300 s | **2 saves in 30 min** | `~/opt/my-setup/state/tmux/resurrect/` | yes | Ctrl-b then Ctrl-r | 20 min; Claude panes come back empty |
@@ -191,7 +191,7 @@ Claude Code runs one `statusLine` command; the key is owned by my-setup (`module
 | the crash restore | **no: `ares tmux`** (decided, the user, 2026-11-07) | agent-resume (was asm) | | agent-tracker only says what was where |
 | tokens, cost, quotas | **yes: merged** (decided, the user, 2026-11-07) | — | same role (data layer), same tick, same UUID key | — |
 | pane colors | no | agent-notify | | display, not tracking |
-| Chrome tabs | no | my-setup's Chrome kit | | tabs, not Claude sessions |
+| Chrome tabs | no | chrome-gateways (the Chrome kit) | | tabs, not Claude sessions |
 
 ## 9. Steps
 
