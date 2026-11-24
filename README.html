@@ -471,7 +471,7 @@ poller, every minute: each account logged in here: its own token, its own freshn
       <tr><td><code>folder</code></td><td>TEXT NOT NULL</td><td>the session's working directory; <code>''</code> when unknown</td></tr>
       <tr><td><code>entrypoint</code></td><td>TEXT NOT NULL</td><td>as Claude Code wrote it: <code>cli</code> (interactive), <code>sdk-cli</code> (<code>claude -p</code>), <code>sdk-py</code> (Agent SDK), …; <code>''</code> when unknown</td></tr>
       <tr><td><code>job</code></td><td>TEXT NOT NULL</td><td>the job-runner job whose program started the session (<code>&lt;repo&gt;</code> or <code>&lt;repo&gt;.&lt;job&gt;</code>, e.g. <code>jobs.apply</code>), from the resource attribute <code>job.name</code> of the session's telemetry; <code>''</code> = no job: an interactive session, its subagents and the <code>claude -p</code> it ran, a session without telemetry, and every slot before 2026-11-20 (since 2026-11-20)</td></tr>
-      <tr><td><code>account</code></td><td>TEXT NOT NULL</td><td>The Claude account's organization uuid (<code>telemetry.account</code>, from the attribute <code>organization.id</code>): the request's own telemetry event (<code>aggregate_slots</code>), else the account of its session's telemetry when that names exactly one, else <code>''</code>. <code>''</code> = unknown: every slot written before 2026-11-21 (no row is rewritten), a request telemetry never saw, a session resumed on another account whose request has no event of its own. Before 2026-11-19 every request was account a. Names and the main account: the <code>accounts</code> table (§3.5)</td></tr>
+      <tr><td><code>account</code></td><td>TEXT NOT NULL</td><td>The Claude account's organization uuid (<code>telemetry.account</code>, from the attribute <code>organization.id</code>): the request's own telemetry event (<code>aggregate_slots</code>), else the account of its session's last telemetry event before the end of its slot (else the session's first event; since 2026-11-24: a session can change account), else <code>''</code>. <code>''</code> = unknown: every slot written before 2026-11-21 (no row is rewritten), a request telemetry never saw, and, before 2026-11-24, another machine's request counted again (<code>doc/changes.md</code> 2026-11-24). Before 2026-11-19 every request was account a. Names and the main account: the <code>accounts</code> table (§3.5)</td></tr>
       <tr><td><code>model</code></td><td>TEXT NOT NULL</td><td>e.g. <code>claude-opus-5-5</code></td></tr>
       <tr><td><code>requests</code></td><td>INTEGER</td><td>number of requests</td></tr>
       <tr><td><code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_tokens</code>, <code>cache_write_5m_tokens</code>, <code>cache_write_1h_tokens</code></td><td>INTEGER</td><td>sums, from the transcripts</td></tr>
@@ -486,7 +486,8 @@ requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 72
   </div>
   <h3 id="build">6.2 · How a slot is built (job <code>aggregates</code>, every 5 min)</h3>
   <div class="card">
-<pre>1. transcript_reader.py: new transcript lines → intermediary requests, + a scan: complete_through = now − 15 min
+<pre>1. transcript_reader.py: new transcript lines → intermediary requests (only those made on this machine: a cwd under another
+   machine's home is a synced transcript's, counted there), + a scan: complete_through = now − 15 min
 2. every slot that is final and not yet written:
      transcript requests ── LEFT JOIN telemetry_requests ON request_id ──▶ tokens + usd (or tokens_without_usd)
    + telemetry-only requests (prompt suggestions, summaries, web search, titles, compaction: 9.2% of the $)

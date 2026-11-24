@@ -2,7 +2,7 @@
 
 For any project or script that **reads** what agent-tracker (agent-usage-tracker until 2026-11) stores: a status line, auto-job-apply, agent-resume, claude-close-keep-screen, agent-notify, an analysis. Sections 1–3: the usage databases; section 4: the session files and `quota_latest.json`. This file says how to read it safely, and what to read. What each field means: `doc/tables.md`; what exists upstream: `doc/upstream.md`; why it is built this way: `doc/design.md`; when a row's shape changed: `doc/changes.md`.
 
-Last checked: 2026-11-07.
+Last checked: 2026-11-24 (rule 12: duplicated slots).
 
 ## 1. Rules
 
@@ -19,6 +19,7 @@ Last checked: 2026-11-07.
 | 9 | **A stretch with no reading at all is unknown, not unchanged** | while Claude Code runs on neither machine for more than 8 h, no reading is taken; usage elsewhere shows up afterwards as a total (`doc/design.md` P15) |
 | 10 | **Within one window the percent never decreases**: in a series, keep the first reading of each new running maximum, keyed by `ts` | older statusline rows include stale re-sent readings (`doc/tables.md` §7.2) |
 | 11 | **Never compare a percent across plans** (Pro until 2026-10-07 16:51 UTC, Max 5x since) | 1% of Max 5x weighs about 4× a Pro 1% (`adhoc_quotas_analysis/CONCLUSIONS.md` §2) |
+| 12 | **Slots before 2026-11-24 count some requests twice**: skip a slot whose `folder` is under another machine's home (`usage_db.foreign_folder(folder, home)`, the machine's home being the one its slots with an account or a $ ran under: `src/dashboard.py`'s `machine_home`) | agent-resume syncs transcripts both ways and each machine counted the other's requests too, with no account and no $ (NAS 28,741 requests since 2026-10-13, Mac 930 since 2026-11-22; `doc/changes.md` 2026-11-24) |
 
 ## 2. Rows written after their `ts` (rule 3)
 

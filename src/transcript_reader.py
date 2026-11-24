@@ -29,6 +29,11 @@ output_tokens growing from line to line, over up to 292 s (measured
     its first line - and is picked up by a later run;
   - a request_id already stored is skipped (a resumed session copies earlier
     requests into its new transcript).
+  - a request made on another machine (its cwd under another machine's
+    home: usage_db.foreign_folder) is skipped: agent-resume syncs transcripts
+    both ways, and that machine counts it (since 2026-11-24; before, both did).
+    Per line, so a transcript resumed on the other machine counts its earlier
+    requests on the first machine and its later ones on the second.
 Each run then records a scan whose complete_through_ts is now - 15 min:
 every request that started before it is in the database.
 
@@ -104,6 +109,8 @@ def read_file(path: str, offset: int, complete_before: int, d_found: dict) -> in
         ts = _epoch(d_rec.get("timestamp"))
         if not key or ts is None:
             continue
+        if usage_db.foreign_folder(d_rec.get("cwd")):
+            continue  # made on the other machine (a transcript agent-resume synced here): counted there
         out = d_msg["usage"].get("output_tokens") or 0
         l_entry = d_seen.get(key)
         if l_entry is None:

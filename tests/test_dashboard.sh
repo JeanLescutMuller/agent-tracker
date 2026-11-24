@@ -31,10 +31,12 @@ def slot(t, folder, entrypoint, acct, usd, inp=100, cr=1000, req=1, job=""):
                 model="claude-opus-5-5", requests=req, input_tokens=inp, output_tokens=10, cache_read_tokens=cr,
                 cache_write_5m_tokens=5, cache_write_1h_tokens=0, cache_write_unknown_tokens=0, usd=usd,
                 tokens_without_usd=0 if usd is not None else inp + 10 + cr + 5, written_ts=t)
+g.add_slots(usage_db.open_aggregates("claude", machine="m2"), [dict(slot(H + 300, "/home/x/dev/agents/alpha/src", "cli", UA, 0.5), machine="m2")])
 g.add_slots(usage_db.open_aggregates("claude"), [
-    slot(H, "/Users/x/dev/agents/alpha", "cli", UA, 1.0), slot(H + 300, "/home/x/dev/agents/alpha/src", "cli", UA, 0.5),
+    slot(H, "/Users/x/dev/agents/alpha", "cli", UA, 1.0),
     slot(H + 3600, "/Users/x/opt/beta", "sdk-cli", UB, None, job="beta.nightly"),
-    slot(H + 3900, "/tmp/claude-1000/-home-x-dev-infra-gamma/u1/scratchpad", "cli", "", 2.0)])
+    slot(H + 3900, "/tmp/claude-1000/-home-x-dev-infra-gamma/u1/scratchpad", "cli", "", 2.0),
+    slot(H + 4200, "/home/x/dev/agents/alpha", "cli", "", None, req=7)])   # m2's request (home /home/x), counted by m1 too
 PY
 md5() { python3 -c 'import sqlite3, sys, hashlib; print(hashlib.md5("".join("".join(sqlite3.connect(p).iterdump()) for p in sys.argv[1:]).encode()).hexdigest())' "$TMP/rt/data/claude/"*.db "$TMP/rt/data/claude/aggregates/"*.db; }
 before="$(md5)"
@@ -48,9 +50,11 @@ assert_eq "repos: a Mac and a NAS path of one repo are one repo; ~/opt/<x> and a
 assert_eq "kinds" "['development', 'scheduled run']" "$(q 'd["dims"]["kind"]')"
 assert_eq "accounts by name; no account: (unknown)" "['a', 'b', '(unknown)']" "$(q 'd["dims"]["account"]')"
 assert_eq "jobs: none = (interactive)" "['(interactive)', 'beta.nightly']" "$(q 'd["dims"]["job"]')"
-assert_eq "alpha's two slots of one hour summed: 2 requests, \$1.5" "[[2, 200, 20, 2000, 10, 1.5, 0]]" "$(q '[r[8:] for r in d["rows"] if r[1] == 0]')"
+assert_eq "alpha's two slots of one hour (one per machine) summed: 2 requests, \$1.5" "[2, 200, 20, 2000, 10, 1.5, 0]" "$(q '(lambda R: [sum(r[k] or 0 for r in R) for k in range(8, 15)])([r for r in d["rows"] if r[1] == 0])')"
 assert_eq "beta: no \$, every token counted without \$" "[[1, 100, 10, 1000, 5, None, 1115]]" "$(q '[r[8:] for r in d["rows"] if r[1] == 1]')"
 assert_eq "the bar of a slot is its hour" "True" "$(q 'all(r[0] % 3600 == 0 for r in d["rows"])')"
+
+assert_eq "another machine's request is left out, and counted as left out" "7" "$(q 'd["duplicates"]')"
 
 section "--data: quota readings"
 assert_eq "both accounts" "['a', 'b']" "$(q 'sorted(d["quota"])')"

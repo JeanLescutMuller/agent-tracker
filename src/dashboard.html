@@ -22,7 +22,7 @@ const inH = t => { if (t == null) return "–"; const s = t - DATA.now; return s
 const ago = t => { const s = DATA.now - t; return s < 120 ? `${s} s ago` : s < 7200 ? `${Math.round(s / 60)} min ago` : `${(s / 3600).toFixed(1)} h ago`; };
 
 DK.header({ title: "Claude: tokens and quotas", nav: DATA.nav, cmd: `usage-dashboard --hours ${DATA.hours}`,
-  sub: `Last ${DATA.hours} h, made ${DATA.made} from agent-tracker on the NAS: every machine's Claude requests (one row per 5 minutes, summed per ${DATA.step === 3600 ? "hour" : "day"}) and both accounts' quota readings. Tokens = input + output + cache read + cache write; "new tokens" leaves out cache reads (cheap, re-read context). $ = Claude Code's own cost figure, when it sent one. Drag on a chart to zoom, double-click to reset.` });
+  sub: `Last ${DATA.hours} h, made ${DATA.made} from agent-tracker on the NAS: every machine's Claude requests (one row per 5 minutes, summed per ${DATA.step === 3600 ? "hour" : "day"}) and both accounts' quota readings. Tokens = input + output + cache read + cache write; "new tokens" leaves out cache reads (cheap, re-read context). $ = Claude Code's own cost figure, when it sent one.${DATA.duplicates ? ` Left out: ${big(DATA.duplicates)} requests another machine counted too (synced transcripts, before 2026-11-24).` : ""} Drag on a chart to zoom, double-click to reset.` });
 DK.range(DATA.t0, DATA.now);
 
 // Rows: [bar ts, repo, kind, machine, job, account, model, entrypoint, requests, input, output, cache read, cache write, usd, tokens without usd]

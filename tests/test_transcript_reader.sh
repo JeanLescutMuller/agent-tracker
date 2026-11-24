@@ -9,6 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/harness.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-transcripts.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 RT="$TMP/rt"
+export AGENT_TRACKER_USER_HOME=/Users/x   # this machine's home: the fixtures' folders are its own (usage_db.foreign_folder)
 PROJ="$TMP/projects"
 SDB="$RT/data/claude/intermediary.db"   # Claude requests: the local working tables (doc/design.md §5)
 CODEX="$TMP/codex"
@@ -88,6 +89,21 @@ before="$(q "SELECT group_concat(request_id || output_tokens) FROM (SELECT * FRO
 rm -f "$SDB" "$SDB-wal" "$SDB-shm"
 read_at $((T0 + 5000)) >/dev/null
 assert_eq "rebuilt identical" "$before" "$(q "SELECT group_concat(request_id || output_tokens) FROM (SELECT * FROM requests ORDER BY request_id)")"
+
+section "a transcript synced from the other machine and resumed here: each request counted by the machine it ran on (2026-11-24)"
+mkdir -p "$PROJ/-home-y-dev-app"
+{
+    line 2026-10-08T13:00:00.000Z req_m1 5 s3 /home/y/dev/app cli     # made on the other machine (its home /home/y), synced here
+    line 2026-10-08T13:02:00.000Z req_m2 5 s3 /home/y/dev/app cli
+    line 2026-10-08T13:05:00.000Z req_h1 5 s3 /Users/x/dev/app cli    # the session resumed here, in this machine's folder
+} > "$PROJ/-home-y-dev-app/s3.jsonl"
+read_at $((T0 + 5400)) >/dev/null
+assert_eq "here: only the request made here" "req_h1" "$(q "SELECT request_id FROM requests WHERE session_id = 's3'")"
+RT="$TMP/rt2" AGENT_TRACKER_USER_HOME=/home/y read_at $((T0 + 5400)) >/dev/null   # the other machine reads the same files
+assert_eq "there: only the two made there, none of this machine's" "req_m1 req_m2" \
+    "$(python3 -c 'import sqlite3, sys; print(" ".join(r[0] for r in sqlite3.connect(sys.argv[1]).execute("SELECT request_id FROM requests ORDER BY request_id")))' "$TMP/rt2/data/claude/intermediary.db")"
+assert_eq "this machine's home itself is its own; a folder that is no one's home (/tmp) too" "False False True True" \
+    "$(python3 -c "import sys; sys.path.insert(0, '$REPO_ROOT/src'); import usage_db as u; print(u.foreign_folder('/Users/x'), u.foreign_folder('/tmp/w'), u.foreign_folder('/Users/xy'), u.foreign_folder('/private/tmp', home='/home/y'))")"
 
 section "Codex: one row per turn, repeats skipped, cached input split out"
 CDB="$RT/data/codex/sessions_usages.db"

@@ -216,7 +216,7 @@ Never sent anywhere. No $ computed by us: the only $ is Claude Code's own (telem
 | `folder` | TEXT NOT NULL | the session's working directory; `''` when unknown |
 | `entrypoint` | TEXT NOT NULL | as Claude Code wrote it: `cli` (interactive), `sdk-cli` (`claude -p`), `sdk-py` (Agent SDK), …; `''` when unknown |
 | `job` | TEXT NOT NULL | the job-runner job whose program started the session (`<repo>` or `<repo>.<job>`, e.g. `jobs.apply`), from the resource attribute `job.name` of the session's telemetry; `''` = no job: an interactive session, its subagents and the `claude -p` it ran, a session without telemetry, and every slot before 2026-11-20 (since 2026-11-20) |
-| `account` | TEXT NOT NULL | The Claude account's organization uuid (`telemetry.account`, from the attribute `organization.id`): the request's own telemetry event (`aggregate_slots`), else the account of its session's telemetry when that names exactly one, else `''`. `''` = unknown: every slot written before 2026-11-21 (no row is rewritten), a request telemetry never saw, a session resumed on another account whose request has no event of its own. Before 2026-11-19 every request was account a. Names and the main account: the `accounts` table (§3.5) |
+| `account` | TEXT NOT NULL | The Claude account's organization uuid (`telemetry.account`, from the attribute `organization.id`): the request's own telemetry event (`aggregate_slots`), else the account of its session's last telemetry event before the end of its slot (else the session's first event; since 2026-11-24: a session can change account; before, only a session with one account), else `''`. `''` = unknown: every slot written before 2026-11-21 (no row is rewritten), a request telemetry never saw, and, before 2026-11-24, another machine's request counted again (`doc/changes.md` 2026-11-24). Before 2026-11-19 every request was account a. Names and the main account: the `accounts` table (§3.5) |
 | `model` | TEXT NOT NULL | e.g. `claude-opus-5-5` |
 | `requests` | INTEGER | number of requests |
 | `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_5m_tokens`, `cache_write_1h_tokens` | INTEGER | sums, from the transcripts |
@@ -235,7 +235,8 @@ requests 2 · in 6 · out 351 · cache read 643,761 · write 5m 0 · write 1h 72
 ### 6.2 How a slot is built (job `aggregates`, every 5 min)
 
 ```
-1. transcript_reader.py: new transcript lines → intermediary requests, + a scan: complete_through = now − 15 min
+1. transcript_reader.py: new transcript lines → intermediary requests (only those made on this machine: a cwd under another
+   machine's home is a synced transcript's, counted there), + a scan: complete_through = now − 15 min
 2. every slot that is final and not yet written:
      transcript requests ── LEFT JOIN telemetry_requests ON request_id ──▶ tokens + usd (or tokens_without_usd)
    + telemetry-only requests (prompt suggestions, summaries, web search, titles, compaction: 9.2% of the $)

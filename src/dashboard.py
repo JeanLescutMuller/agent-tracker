@@ -30,6 +30,18 @@ def connect(path):
     return db
 
 
+def machine_home(db):
+    """A machine's home (/Users/<user>, /home/<user>): the one most of its requests seen by its telemetry (an account or a $)
+    ran under: telemetry only sees the machine's own requests (counting every request would pick the other machine's
+    home on the NAS, which held 25 times more copies than requests of its own); None if none."""
+    d = {}
+    for folder, n in db.execute("SELECT folder, SUM(requests) FROM slots WHERE (account != '' OR usd IS NOT NULL) "
+                                "AND (folder LIKE '/Users/%' OR folder LIKE '/home/%') GROUP BY folder"):
+        home = "/".join(folder.split("/")[:3])
+        d[home] = d.get(home, 0) + n
+    return max(d, key=d.get) if d else None
+
+
 def bin_for(hours):
     """The bar width: an hour up to 8 days, a day beyond."""
     return 3600 if hours <= 192 else 86400
@@ -50,10 +62,15 @@ def data(hours):
     vals = {k: [] for k in DIMS}
     idx = lambda k, v: vals[k].index(v) if v in vals[k] else (vals[k].append(v) or len(vals[k]) - 1)
     d_rows = {}
+    n_dup = 0
     for f in sorted((RUNTIME / "data" / "claude" / "aggregates").glob("*.db")):
         db = connect(f)
+        home = machine_home(db)
         for r in db.execute("SELECT (ts / %d) * %d, folder, machine, job, account, model, entrypoint, requests, %s, usd, tokens_without_usd "
                             "FROM slots WHERE ts >= ?" % (step, step, TOKENS), (t0b,)):
+            if home and usage_db.foreign_folder(r[1], home):
+                n_dup += r[7]                               # another machine's request, counted twice before 2026-11-24
+                continue
             key = (r[0], idx("repo", usage_db.project(r[1])), idx("kind", usage_db.kind(r[1], r[6])), idx("machine", r[2]), idx("job", r[3] or "(interactive)"),
                    idx("account", name(r[4]) if r[4] else "(unknown)"), idx("model", r[5]), idx("entrypoint", r[6] or "(unknown)"))
             acc = d_rows.setdefault(key, [0, 0, 0, 0, 0, None, 0])
@@ -77,7 +94,7 @@ def data(hours):
               for r in q.execute("SELECT COALESCE(name, substr(account, 1, 8)), ts, source, machine, five_hour_pct, five_hour_resets_ts, "
                                  "seven_day_pct, seven_day_resets_ts FROM latest_by_account ORDER BY name")]
     q.close()
-    return {"t0": t0, "now": now, "step": step, "dims": vals, "rows": l_rows, "quota": d_quota, "latest": latest}
+    return {"t0": t0, "now": now, "step": step, "dims": vals, "rows": l_rows, "quota": d_quota, "latest": latest, "duplicates": n_dup}
 
 
 def quota_series(l, now, bucket=300):

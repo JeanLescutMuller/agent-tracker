@@ -11,7 +11,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/agent-usage-tracker-slots.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 RT="$TMP/rt"
 ADB="$RT/data/claude/aggregates/m1.db"
-export AGENT_TRACKER_HOME="$RT" JR_MACHINE_NAME=m1
+export AGENT_TRACKER_HOME="$RT" JR_MACHINE_NAME=m1 AGENT_TRACKER_USER_HOME=/Users/x   # this machine's home: the fixtures' folders are its own
 S1=11111111-1111-1111-1111-111111111111 S2=22222222-2222-2222-2222-222222222222 SX=99999999-9999-9999-9999-999999999999
 
 py() { python3 -c "import sys; sys.path.insert(0, '$REPO_ROOT/src'); import usage_db, ingest_session_usage as s, ingest_aggregates as g, aggregate_slots as a; $1"; }
@@ -86,7 +86,7 @@ assert_eq "a bad row rejects its whole batch" "11" \
 try: g.add_slots(usage_db.open_aggregates('claude'), [$good | dict(ts=3000, dt=usage_db.iso(3000)), $good | dict(ts=3001)])
 except ValueError: pass" ; q "SELECT COUNT(*) FROM slots")"
 
-section "the account (2026-11-21): a request's own telemetry, else its session's single account, else '' (unknown)"
+section "the account: a request's own telemetry, else its session's account at its time (2026-11-24), else '' (unknown)"
 UA=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa UB=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
 S4=44444444-4444-4444-4444-444444444444 S5=55555555-5555-5555-5555-555555555555 S6=66666666-6666-6666-6666-666666666666
 req 4000 q1 $S4 /c cli opus 1 1 0 0 0
@@ -96,18 +96,17 @@ req 4020 q3 $S5 /c cli opus 1 1 0 0 0
 tel 4021 q3 $S5 opus 1 1 0 0 0.1 "" $UB
 req 4030 q4 $S5 /c cli opus 1 1 0 0 0
 tel 4031 q4 $S5 opus 1 1 0 0 0.1 "" $UA           # S5 was resumed on another account: two accounts in one session
-req 4040 q5 $S5 /c cli opus 1 1 0 0 0             # no telemetry of its own, its session has two accounts: unknown
+req 4040 q5 $S5 /c cli opus 1 1 0 0 0             # no telemetry of its own, its session has two: the one in use then (A, since 4031)
 tel 4050 t4 $S4 haiku 1 1 0 0 0.1 "" $UA          # telemetry only, account A
 req 4060 q6 $S6 /d cli opus 1 1 0 0 0             # a session telemetry never saw
 scan 4600 4500
 run 4600 >/dev/null
-assert_eq "per account: own telemetry, the session's single account, a session with two: only its own events; unknown ''" "/c	haiku	aaaa	1
-/c	opus		1
-/c	opus	aaaa	3
+assert_eq "per account: own telemetry, else the session's account at the time (a session with two included); unknown ''" "/c	haiku	aaaa	1
+/c	opus	aaaa	4
 /c	opus	bbbb	1
 /d	opus		1" "$(q "SELECT folder, model, substr(account, 1, 4), requests FROM slots WHERE ts = 3900 ORDER BY folder, model, account")"
 assert_eq "the account is the whole organization uuid" "$UA" "$(q "SELECT DISTINCT account FROM slots WHERE account LIKE 'aaaa%'")"
-assert_eq "two accounts, same slot, folder, entrypoint, job and model: two rows (the key holds the account)" "3" "$(q "SELECT COUNT(*) FROM slots WHERE ts = 3900 AND folder = '/c' AND model = 'opus'")"
+assert_eq "two accounts, same slot, folder, entrypoint, job and model: two rows (the key holds the account)" "2" "$(q "SELECT COUNT(*) FROM slots WHERE ts = 3900 AND folder = '/c' AND model = 'opus'")"
 
 section "the gate and the account"
 OLDDB="$RT/data/claude/aggregates/m3.db"

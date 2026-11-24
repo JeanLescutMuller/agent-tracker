@@ -34,6 +34,7 @@ one; `tokens_without_usd` is everything it does not cover.
 Usage: python3 aggregate_slots.py [--send-to HOST]   (prints the reader's line, then its own)
 """
 import argparse
+import bisect
 import subprocess
 import sys
 import time
@@ -75,6 +76,16 @@ FROM requests WHERE ts >= :start AND ts < :end
 """
 
 
+def account_at(l_event, before):
+    """A request with no telemetry event of its own: the account of its session's last event before `before` (the end of
+    its slot), else the session's first one. A session can change account (resumed on the other one, or /login):
+    each request takes the account in use at its time (since 2026-11-24; before, only a session with one account)."""
+    if not l_event:
+        return None
+    k = bisect.bisect_left(l_event, (before,))
+    return l_event[k - 1][1] if k else l_event[0][1]
+
+
 def final_slots(now: int) -> tuple[list[dict], int, int]:
     """The final slots not written yet: ([slot row], first slot start, end of
     the last final slot)."""
@@ -89,20 +100,20 @@ def final_slots(now: int) -> tuple[list[dict], int, int]:
     if end <= start:
         return [], start, end
     sessions = usage_db.db_path("claude", "sessions_usages")
-    d_session_account = {}     # session id -> its account, when its telemetry names exactly one
+    d_session_events = {}      # session id -> [(ts, account)] of its telemetry events, in time order
     acct_t = "NULL"
     if sessions.exists():
         inter.execute("ATTACH DATABASE ? AS s", (str(sessions),))
         if "account" in [r[1] for r in inter.execute("PRAGMA s.table_info(telemetry)")]:
             acct_t = "t.account"
-            d_session_account = {sid: acct for sid, acct, n in inter.execute(
-                "SELECT session_id, MIN(account), COUNT(DISTINCT account) FROM s.telemetry "
-                "WHERE account IS NOT NULL AND session_id IS NOT NULL GROUP BY session_id") if n == 1}
+            for sid, ts, acct in inter.execute("SELECT session_id, ts, account FROM s.telemetry "
+                                               "WHERE account IS NOT NULL AND session_id IS NOT NULL ORDER BY ts"):
+                d_session_events.setdefault(sid, []).append((ts, acct))
     d_slots = {}
     for slot, folder, entrypoint, job, model, i, o, cr, w5, w1, wu, usd, session_id, own_account in inter.execute(
             REQUESTS_SQL.format(job_r=JOB_SQL.format(session="r.session_id"), job_t=JOB_SQL.format(session="t.session_id"),
                                 acct_t=acct_t) if sessions.exists() else REQUESTS_ONLY_SQL, {"start": start, "end": end}):
-        account = own_account or d_session_account.get(session_id) or ""
+        account = own_account or account_at(d_session_events.get(session_id), slot + SLOT_S) or ""
         d = d_slots.setdefault((slot, folder, entrypoint, job, account, model), dict(
             ts=slot, dt=usage_db.iso(slot), machine=me, folder=folder, entrypoint=entrypoint, job=job, account=account, model=model,
             requests=0, input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_write_5m_tokens=0,

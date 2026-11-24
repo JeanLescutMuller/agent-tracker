@@ -402,6 +402,26 @@ def iso(ts: int) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
 
 
+def user_home() -> str:
+    """This machine's home folder, as a request's folder (cwd) shows it; AGENT_TRACKER_USER_HOME overrides it (tests)."""
+    return (os.environ.get("AGENT_TRACKER_USER_HOME") or str(Path.home())).rstrip("/")
+
+
+def foreign_folder(folder, home=None) -> bool:
+    """True when a request made in `folder` was made on another machine: its folder is under another home (/Users/... on
+    the NAS, /home/... on the Mac) or macOS's /private/ seen from Linux. agent-resume syncs transcripts both ways, so a
+    machine also holds the other's requests; each request is counted only by the machine whose folder it ran in (a
+    transcript resumed elsewhere: its earlier lines on the first machine, its later ones on the second). Measured
+    2026-11-24: every such request (NAS 28,741, Mac 930) is also in the other machine's own reading, and no other
+    request is. `home`: the machine's home (default: this one's)."""
+    if not folder:
+        return False
+    home = (home or user_home()).rstrip("/")
+    if folder == home or folder.startswith(home + "/"):
+        return False
+    return folder.startswith(("/Users/", "/home/")) or (home.startswith("/home/") and folder.startswith("/private/"))
+
+
 def machine_name() -> str:
     """This machine's name: skill "machine-name" (copy it identically)."""
     # Imports here, not at the top: the statusline path never needs them.
