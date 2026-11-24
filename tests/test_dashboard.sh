@@ -25,6 +25,7 @@ def reading(t, acct, p5, end5, p7=10, end7=H + 5 * 86400):
 reading(H + 60, UA, 40, H + 3600)          # account a: 40% until its 5-hour window resets at H+1h, then a reading at H+2h
 reading(H + 7200, UA, 5, H + 7200 + 5 * 3600)
 reading(H + 600, UB, 80, H + 5 * 3600)
+reading(H - 600, UB, 1, H + 2 * 86400)     # misdated (a resumed session, before 2026-11-24): a 5-hour reset 2 days ahead
 def slot(t, folder, entrypoint, acct, usd, inp=100, cr=1000, req=1, job=""):
     return dict(ts=t, dt=usage_db.iso(t), machine="m1", folder=folder, entrypoint=entrypoint, job=job, account=acct,
                 model="claude-opus-5-5", requests=req, input_tokens=inp, output_tokens=10, cache_read_tokens=cr,
@@ -55,6 +56,7 @@ section "--data: quota readings"
 assert_eq "both accounts" "['a', 'b']" "$(q 'sorted(d["quota"])')"
 assert_eq "account a: 40%, then 0 at its reset (H+1h), then 5%" "[40.0, 0.0, 5.0]" "$(q 'd["quota"]["a"]["five"]')"
 assert_eq "the drop is at the reset time" "$(( H + 3600 ))" "$(q 'd["quota"]["a"]["ts"][1]')"
+assert_eq "account b: the misdated reading is left out" "[80.0]" "$(q 'd["quota"]["b"]["five"]')"
 assert_eq "latest per account" "a 5 b 80" "$(q '" ".join("%s %g" % (l["name"], l["five_hour_pct"]) for l in d["latest"])')"
 assert_eq "the databases are unchanged: --data only reads" "$before" "$(md5)"
 

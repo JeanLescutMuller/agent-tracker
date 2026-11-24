@@ -108,28 +108,42 @@ write_transcript "$(cat <<'EOF2'
 {"type":"summary","leafUuid":"x"}
 EOF2
 )"
-run_push "$TRANSCRIPT" 42 "2099-01-01T15:00:00Z" 55 "2099-01-08T00:00:00Z"   # resets ahead: the reset rule keeps the %
+run_push "$TRANSCRIPT" 42 "2026-01-01T15:00:00Z" 55 "2026-01-08T00:00:00Z"   # resets within each window of the reading (both passed now)
 assert_status "exits 0" 0 "$TH_STATUS"
 assert_eq "exactly one row logged" "1" "$(row_count)"
 row="$(all_raw)"
 assert_contains "tagged claude_statusline" "$row" '"source":"claude_statusline"'
 assert_contains "carries the five-hour percent" "$row" '"five_hour_pct":42'
 assert_contains "carries the seven-day percent" "$row" '"seven_day_pct":55'
-assert_contains "carries the five-hour reset" "$row" '"five_hour_resets_at":"2099-01-01T15:00:00Z"'
+assert_contains "carries the five-hour reset" "$row" '"five_hour_resets_at":"2026-01-01T15:00:00Z"'
 assert_contains "names the machine that took it" "$row" '"machine":"t-mac"'
 assert_contains "observed_at is the last assistant entry's timestamp" \
     "$row" '"observed_at":1767261605'
 IFS="$SEP" read -r st_five st_five_reset st_week st_week_reset st_source st_observed <<< "$TH_OUT"
-assert_eq "printed 5h percent" "42" "$st_five"
-assert_eq "printed 5h reset, as epoch" "4070962800" "$st_five_reset"
-assert_eq "printed 7d percent" "55" "$st_week"
-assert_eq "printed 7d reset, as epoch" "4071513600" "$st_week_reset"
+assert_eq "printed 5h percent: its reset has passed, 0" "0" "$st_five"
+assert_eq "printed 5h reset: passed, empty" "" "$st_five_reset"
+assert_eq "printed 7d percent: passed, 0" "0" "$st_week"
+assert_eq "printed 7d reset: passed, empty" "" "$st_week_reset"
 assert_eq "printed source is 'claude_statusline'" "claude_statusline" "$st_source"
 assert_eq "printed observed_at matches the row's" "1767261605" "$st_observed"
 assert_eq "ts column = observed_at, dt its UTC text" "1767261605	2026-01-01T10:00:05Z" "$(q "$ADB" "SELECT ts, dt FROM account_quotas")"
-assert_eq "typed columns" "42.0	4070962800	55.0	4071513600" \
+assert_eq "typed columns" "42.0	1767279600	55.0	1767830400" \
     "$(q "$ADB" "SELECT five_hour_pct, five_hour_resets_ts, seven_day_pct, seven_day_resets_ts FROM account_quotas")"
-assert_eq "latest view serves it" "claude_statusline	42.0	55.0" "$(q "$ADB" "SELECT source, five_hour_pct, seven_day_pct FROM latest")"
+assert_eq "latest view serves it (the reset rule applied)" "claude_statusline	0.0	0.0" "$(q "$ADB" "SELECT source, five_hour_pct, seven_day_pct FROM latest")"
+
+section "a resumed session: a reading newer than its transcript's last reply is dated by the render (2026-11-24)"
+reset
+write_transcript '{"type":"assistant","timestamp":"2026-01-01T10:00:05.000Z"}'
+before=$(date +%s)
+run_push "$TRANSCRIPT" 1 "$(( before + 3 * 3600 ))" 14 "$(( before + 6 * 86400 ))" s-resumed
+ts="$(q "$ADB" "SELECT ts FROM account_quotas")"
+assert_eq "5h reset 3 h ahead, last reply months ago: dated now, not by the reply" "1" "$(( ts >= before && ts <= before + 5 ))"
+reset
+run_push "$TRANSCRIPT" 1 "2026-01-01T14:00:00Z" 14 "2026-02-01T00:00:00Z" s-resumed
+assert_eq "a 7-day reset 31 days after the reply: dated now too" "1" "$(( $(q "$ADB" "SELECT ts FROM account_quotas") >= before ))"
+reset
+run_push "$TRANSCRIPT" 1 "2026-01-01T15:00:05Z" 14 "2026-01-08T10:00:05Z" s-ok
+assert_eq "both resets exactly one window after the reply: dated by the reply" "1767261605" "$(q "$ADB" "SELECT ts FROM account_quotas")"
 
 section "a long bookkeeping tail still finds the assistant entry (byte window, not 20 lines)"
 reset

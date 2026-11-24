@@ -71,6 +71,31 @@ def observed_at(transcript_path) -> int | None:
     return None
 
 
+WINDOWS = (5 * 3600, 7 * 86400)    # a window's length: its reset is never further than this after a reading of it
+
+
+def epoch(value) -> int | None:
+    """A reset time as Claude Code sends it (epoch seconds, as a number or text, or ISO 8601), or None."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        pass
+    try:
+        return int(datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
+def plausible(when, five_reset, week_reset) -> bool:
+    """False when a reset is more than its window after `when`: the reading cannot be that old. A session resumed
+    after a reset shows the account's current reading before its first new reply, and its transcript's last
+    assistant entry is from before the reset (2026-11-24: a reading of today's 14% dated the day before, when the
+    week was at 100%; 206 such rows since 2026-09-25). Such a reading is dated by the render instead."""
+    return all(r is None or r - when <= w + 60 for r, w in zip((epoch(five_reset), epoch(week_reset)), WINDOWS))
+
+
 def text(value):
     """jq's `text` of the old writer: null or "" -> None, anything else -> str."""
     return None if value is None or value == "" else str(value)
@@ -88,6 +113,9 @@ def store(d_payload: dict) -> int | None:
     if when is None:
         return None
     now = int(time.time())
+    d_five, d_week = d_limits.get("five_hour") or {}, d_limits.get("seven_day") or {}
+    if not plausible(when, d_five.get("resets_at"), d_week.get("resets_at")):
+        when = now
     d_acct = claude_accounts.session_account()     # None: an account this machine does not know: no quota reading
     d_common = {"ts": now, "iso": usage_db.iso(now), "source": "claude_statusline", "observed_at": when}
     # The machine that took the reading (since 2026-10-10). The entry point
@@ -97,7 +125,6 @@ def store(d_payload: dict) -> int | None:
         machine = usage_db.machine_name()
     except (OSError, RuntimeError):
         machine = None
-    d_five, d_week = d_limits.get("five_hour") or {}, d_limits.get("seven_day") or {}
     # Percents unrounded, as Claude Code sends them; resets as text, as before.
     d_account = d_common | {
         "five_hour_pct": d_five.get("used_percentage") or 0,

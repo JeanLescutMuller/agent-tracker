@@ -86,6 +86,8 @@ def quota_series(l, now, bucket=300):
     shows it."""
     pts = {}
     for ts, p5, r5, p7, r7 in l:
+        if (r5 and r5 - ts > 5 * 3600 + 60) or (r7 and r7 - ts > 7 * 86400 + 60):
+            continue                                        # dated too early (a resumed session, before 2026-11-24): statusline_usage.plausible
         pts[ts - ts % bucket] = [p5, r5, p7, r7]
     l_ts = sorted(pts)
     out = {"ts": [], "five": [], "seven": []}
