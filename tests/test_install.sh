@@ -34,7 +34,7 @@ assert_status "exits 0" 0 "$TH_STATUS"
 assert_file_missing "no bin/ any more: agent-statusline runs the reader itself" "$RT/bin"
 for f in usage_db.py ingest_account_quota.py ingest_session_usage.py statusline_payload_reader.py statusline_usage.py agent_tracker.py \
     claude_quota_api_poller.py codex_quota_api_poller.py codex_plan_history_poller.py \
-    telemetry_receiver.py transcript_reader.py; do
+    telemetry_receiver.py transcript_reader.py quota_rules.py; do
     assert_file_exists "$f deployed" "$RT/src/$f"
 done
 assert_eq "the reader runs directly: this machine's python, -S" "#!$(command -v python3) -S" "$(head -1 "$RT/src/statusline_payload_reader.py")"
@@ -45,7 +45,7 @@ assert_file_missing "no database before the first write" "$RT/data/claude/accoun
 assert_file_exists "data/claude/ created" "$RT/data/claude"
 assert_file_exists "data/codex/ created" "$RT/data/codex"
 assert_file_missing "adhoc_quotas_analysis/ is run-by-hand, never deployed" "$RT/adhoc_quotas_analysis"
-for job in claude-quota:60 codex-quota:60 codex-plan-history:3600 aggregates:300; do
+for job in claude-quota:60 codex-quota:60 codex-plan-history:3600 aggregates:300 quota-rules:3600; do
     label="com.jeanlescut.agent-tracker.${job%%:*}"
     assert_file_exists "${job%%:*}.sh entrypoint deployed" "$RT/${job%%:*}.sh"
     assert_contains "$label runs its entrypoint with /bin/bash" "$(cat "$RT/$label.plist")" \
@@ -206,7 +206,8 @@ assert_status "exits 0" 0 $?
 assert_file_missing "no LaunchAgents" "$th_home/Library/LaunchAgents"
 for unit in com.jeanlescut.agent-tracker.claude-quota.service com.jeanlescut.agent-tracker.claude-quota.timer \
     com.jeanlescut.agent-tracker.otel.service \
-    com.jeanlescut.agent-tracker.aggregates.service com.jeanlescut.agent-tracker.aggregates.timer; do
+    com.jeanlescut.agent-tracker.aggregates.service com.jeanlescut.agent-tracker.aggregates.timer \
+    com.jeanlescut.agent-tracker.quota-rules.service com.jeanlescut.agent-tracker.quota-rules.timer; do
     assert_eq "$unit: real file in the runtime, symlink in ~/.config/systemd/user" "$RT/$unit" "$(readlink "$UNITS/$unit")"
 done
 assert_contains "a job's service runs its entrypoint with /bin/bash" \

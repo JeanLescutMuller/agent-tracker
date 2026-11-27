@@ -337,7 +337,7 @@ aggregates.sh ─▶ 1 transcript_reader.py ─▶ intermediary.db           agg
 | the Mac's slots on the VM | LIVE | `data/claude/aggregates/chan-lescut-macbook-pro.db`, the same rows as the Mac's |
 | P13 `data/claude/intermediary.db`, P14 one aggregates file per machine | LIVE | since 2026-10-12 18:45 UTC; the slots still equal a separate count of every request (Mac 3,331, VM 41) |
 | readers: agent-statusline, auto-job-apply | LIVE | the printed line; the view `latest` |
-| Category 4 | PARTIAL | a reader's (`FOR_READERS.md`); this repo's own analysis: `adhoc_quotas_analysis/`; the page `usage-dashboard` (§10, since 2026-11-24) |
+| Category 4 | PARTIAL | a reader's (`FOR_READERS.md`); this repo's own analysis: `adhoc_quotas_analysis/`; the page `usage-dashboard` (§10, since 2026-11-24); `data/claude/quota_rules.json` (since 2026-11-27: the rules every reader that compares accounts needs, `FOR_READERS.md` rule 20) |
 | Codex: `codex-quota`, `codex-plan-history`, its turns (Mac) | LIVE | outside the four categories; its rows no longer reach the VM (§13) |
 
 ## 10. Install, tests, logs, docs

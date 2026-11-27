@@ -27,7 +27,7 @@ source "$SCRIPT_DIR/utils.sh"
 RUNTIME="$HOME/opt/agent-tracker"
 BIN_DIR="$HOME/.local/bin"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
-JOBS="claude-quota codex-quota codex-plan-history aggregates"   # as in install.sh
+JOBS="claude-quota codex-quota codex-plan-history aggregates quota-rules"   # as in install.sh
 LABELS="com.jeanlescut.agent-tracker.otel"
 for job in $JOBS; do LABELS="$LABELS com.jeanlescut.agent-tracker.$job"; done
 SYSTEMD_USER="$HOME/.config/systemd/user"

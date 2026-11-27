@@ -16,7 +16,7 @@
 # - the jobs' job-runner entrypoints (<job>.sh, from jobs/), their dashboard
 #   settings (<job>.conf, given to job-runner's dashboard by put-conf.sh) and one trigger
 #   each, com.jeanlescut.agent-tracker.<job>: claude-quota (60s tick),
-#   aggregates (every 5 min), and on macOS only codex-quota (60s)
+#   aggregates (every 5 min), quota-rules (hourly), and on macOS only codex-quota (60s)
 #   and codex-plan-history (hourly); each entrypoint decides, works and
 #   records its checks through job-runner (separate project,
 #   ~/opt/job-runner/lib.sh);
@@ -185,7 +185,7 @@ _schedule() {
 
 # Each job: name, its trigger's interval in seconds (as in the header of its
 # entrypoint, jobs/<job>.sh). The Codex jobs only where Codex is (the Mac).
-JOBS="claude-quota:60 aggregates:300"
+JOBS="claude-quota:60 aggregates:300 quota-rules:3600"
 [ "$OS" = Darwin ] && JOBS="$JOBS codex-quota:60 codex-plan-history:3600"
 
 if [ -d "$OLD_RUNTIME/data" ] && [ ! -d "$RUNTIME/data" ]; then
